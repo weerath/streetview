@@ -1,95 +1,95 @@
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
 <script>
 // --- CONFIGURATION ---
-const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
-const API_KEY = 'YOUR_API_KEY';
-const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_API_KEY = 'YOUR_API_KEY';
+const firebaseConfig = { /* ใส่ Firebase Config ของคุณ */ };
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
 let tokenClient;
-let gapiInited = false;
-let gsisInited = false;
+let currentPanoFile = null;
 
-// 2. Initialize Google API
-async function gapiStart() {
+// 1. Initialize Google Auth
+function gapiStart() {
     gapi.load('client', async () => {
-        await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
-        gapiInited = true;
+        await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
     });
     tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID, scope: SCOPES, callback: '', 
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: '', 
     });
-    gsisInited = true;
 }
 window.onload = gapiStart;
 
-// 3. ฟังก์ชันอัปโหลดไป Google Drive
-async function uploadToDrive(file) {
-    return new Promise((resolve, reject) => {
-        tokenClient.callback = async (response) => {
-            if (response.error !== undefined) throw (response);
-
-            // สร้าง Metadata ของไฟล์
-            const metadata = {
-                name: `pano_${Date.now()}.jpg`,
-                mimeType: 'image/jpeg'
-            };
-
-            const formData = new FormData();
-            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-            formData.append('file', file);
-
-            // สั่งอัปโหลด
-            const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + response.access_token },
-                body: formData
-            });
-            const driveFile = await res.json();
-
-            // ตั้งค่า Permission ให้ทุกคนดูได้ (Public)
-            await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + response.access_token, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ role: 'reader', type: 'anyone' })
-            });
-
-            // สร้าง Direct Link สำหรับแสดงใน Pannellum
-            const directLink = `https://docs.google.com/uc?export=view&id=${driveFile.id}`;
-            resolve(directLink);
-        };
-
-        if (gapi.client.getToken() === null) {
-            tokenClient.requestAccessToken({ prompt: 'consent' });
-        } else {
-            tokenClient.requestAccessToken({ prompt: '' });
-        }
-    });
+// 2. ฟังก์ชันเมื่อกดปุ่มเลือกรูป (Browse Local File)
+function triggerUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = e => {
+        currentPanoFile = e.target.files[0];
+        if(currentPanoFile) startUploadProcess();
+    };
+    input.click();
 }
 
-// 4. แก้ไขฟังก์ชันเดิมในหน้าเว็บ
-async function uploadPanorama() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file || !curId) return;
+// 3. กระบวนการอัปโหลดไป Google Drive
+async function startUploadProcess() {
+    tokenClient.callback = async (response) => {
+        if (response.error) return;
 
-    showStatus('success', '⏳ กำลังส่งไฟล์ไปที่ Google Drive...');
-    
-    try {
-        const driveLink = await uploadToDrive(file);
-        
-        // บันทึกลง Database (ในที่นี้คือ Firebase หรือโครงสร้างเดิมของคุณ)
-        const p = data.find(x => x.id === curId);
-        p.image = driveLink;
-        
-        await saveToJSON(); // บันทึก JSON ลง GitHub หรือ Firebase ตามที่ตั้งค่าไว้
-        loadViewer();
-        showStatus('success', '✅ อัปโหลดสำเร็จและดึง Link มาแล้ว!');
-    } catch (e) {
-        console.error(e);
-        showStatus('error', '❌ การอัปโหลดล้มเหลว');
+        showStatus('⏳ กำลังอัปโหลดไป Google Drive...', '#2196f3');
+
+        // อัปโหลดไฟล์
+        const metadata = { name: `pano_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
+        const formData = new FormData();
+        formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        formData.append('file', currentPanoFile);
+
+        const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + response.access_token },
+            body: formData
+        });
+        const driveFile = await uploadRes.json();
+
+        // ตั้งค่า Permission เป็น Public (เพื่อให้ Pannellum อ่านได้)
+        await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + response.access_token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'reader', type: 'anyone' })
+        });
+
+        // บันทึก Link ลง Firebase
+        const directLink = `https://docs.google.com/uc?export=view&id=${driveFile.id}`;
+        updatePointImage(directLink);
+    };
+
+    // ขอสิทธิ์ Access Token
+    if (gapi.client.getToken() === null) {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+    } else {
+        tokenClient.requestAccessToken({ prompt: '' });
     }
 }
+
+async function updatePointImage(link) {
+    const p = data.find(x => x.id === curId);
+    p.image = link;
+    await db.ref('points').set(data); // บันทึกข้อมูล JSON ไป Firebase
+    loadViewer(); // แสดงผลรูป 360 ทันที
+    showStatus('✅ สำเร็จ!', '#4caf50');
+}
 </script>
+
+<div class="upload-zone" onclick="triggerUpload()">
+    <div>📁 คลิกเพื่อเลือกรูป 360 และอัปโหลดไป Google Drive</div>
+</div>
