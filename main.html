@@ -3,58 +3,66 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Master SV Editor - Google Drive & 360 Viewer</title>
+    <title>360 VR Editor Pro - Google Drive & Firebase</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 
     <style>
-        :root { --accent: #2196f3; --red: #ff5252; --dark: #1a1a1a; }
-        body { margin: 0; height: 100vh; display: flex; font-family: sans-serif; overflow: hidden; background: #000; }
-        #sidebar { width: 340px; height: 100%; background: #fff; z-index: 2000; border-right: 1px solid #ddd; display: flex; flex-direction: column; position: relative; }
-        #viewer-container { flex-grow: 1; position: relative; background: #111; display: flex; align-items: center; justify-content: center; }
+        :root { --accent: #007bff; --red: #dc3545; --dark: #212529; }
+        body { margin: 0; height: 100vh; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #000; }
+        
+        /* Sidebar */
+        #sidebar { width: 350px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
+        #map-container { height: 250px; width: 100%; border-bottom: 1px solid #dee2e6; }
+        .panel { padding: 20px; overflow-y: auto; flex-grow: 1; }
+        
+        /* Viewer */
+        #viewer-container { flex-grow: 1; position: relative; background: #000; }
         #viewer { width: 100%; height: 100%; }
-        #map-full { height: 250px; width: 100%; }
-        .panel { padding: 15px; overflow-y: auto; flex-grow: 1; }
-        .btn { padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
-        .btn-blue { background: var(--accent); color: white; }
-        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 15px; box-sizing: border-box; }
-        .list-item { padding:10px; border-bottom:1px solid #eee; cursor:pointer; display: flex; justify-content: space-between; align-items: center; }
-        .list-item:hover { background: #f9f9f9; }
-        #preview-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+        
+        /* UI Elements */
+        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .list-item { padding: 12px; border-bottom: 1px solid #f1f1f1; cursor: pointer; transition: 0.2s; }
+        .list-item:hover { background: #f8f9fa; border-left: 4px solid var(--accent); }
+        
+        /* Edit Overlay */
+        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 20px; box-sizing: border-box; }
+        .status-text { font-size: 0.85em; color: var(--accent); text-align: center; margin-top: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div id="map-full"></div>
+    <div id="map-container" id="map"></div>
     <div class="panel">
-        <h3>รายการจุดทั้งหมด</h3>
-        <button class="btn btn-blue" onclick="addNewPoint()">+ เพิ่มจุดใหม่ (ตำแหน่งปัจจุบันในแผนที่)</button>
+        <h3 style="margin-top:0;">360° Locations</h3>
+        <button class="btn btn-primary" onclick="addNewPoint()">+ เพิ่มจุด 360 ใหม่</button>
         <div id="tree-list" style="margin-top: 15px;"></div>
     </div>
 
     <div id="edit-panel" class="edit-overlay">
-        <h3>แก้ไขข้อมูลจุด</h3>
+        <h3>แก้ไขข้อมูลจุด 360</h3>
         <label>ชื่อสถานที่:</label>
-        <input type="text" id="pName" style="width:100%; padding:8px; margin-bottom:15px; box-sizing: border-box;" oninput="updateName()">
+        <input type="text" id="pName" style="width:100%; padding:10px; margin: 10px 0 20px 0; border:1px solid #ccc; border-radius:4px;" oninput="updateName()">
         
-        <div style="margin-top:10px; border: 1px dashed #ccc; padding: 10px; border-radius: 8px;">
-            <p style="margin-top:0;">อัปโหลดรูปภาพ (ปกติ/360):</p>
-            <button class="btn btn-blue" onclick="document.getElementById('fileInput').click()">📁 เลือกไฟล์รูปภาพ</button>
+        <div style="border: 2px dashed #ddd; padding: 15px; border-radius: 8px; text-align: center;">
+            <p style="margin-top:0;">อัปโหลดภาพ Equirectangular (2:1)</p>
+            <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">📁 เลือกไฟล์ภาพ 360</button>
             <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
-            <p id="uploadStatus" style="font-size:0.85em; color:var(--accent); text-align:center; margin-top:10px;"></p>
+            <div id="uploadStatus" class="status-text"></div>
         </div>
 
-        <button class="btn" style="background:#eee;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
-        <button class="btn" style="background:var(--red); color:white; margin-top:20px;" onclick="deletePoint()">ลบจุดนี้ออกจากระบบ</button>
+        <button class="btn" style="background:#f1f1f1; margin-top:30px;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
+        <button class="btn" style="background:var(--red); color:white;" onclick="deletePoint()">ลบจุดนี้</button>
     </div>
 </div>
 
@@ -63,7 +71,7 @@
 </div>
 
 <script>
-// --- CONFIGURATION (กรุณาเติมข้อมูลของคุณ) ---
+// --- CONFIGURATION ---
 const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID';
 const GOOGLE_API_KEY = 'YOUR_API_KEY';
 const firebaseConfig = {
@@ -75,7 +83,7 @@ const firebaseConfig = {
     appId: "YOUR_APP_ID"
 };
 
-// Initialize
+// Global Variables
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 let tokenClient, map, viewer, dataList = [], curId = null;
@@ -98,65 +106,48 @@ function initGoogleAuth() {
 }
 
 function initMap() {
-    map = L.map('map-full', { attributionControl: false }).setView([13.75, 100.5], 13);
+    map = L.map('map-container', { attributionControl: false }).setView([13.75, 100.5], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 }
 
 function loadFirebaseData() {
     db.ref('points').on('value', (snap) => {
-        const rawData = snap.val();
-        dataList = rawData ? Object.keys(rawData).map(key => ({...rawData[key], id: key})) : [];
+        const val = snap.val();
+        dataList = val ? Object.keys(val).map(key => ({...val[key], id: key})) : [];
         renderTree();
     });
 }
 
-// --- การแสดงผลภาพ (แยก 360 และ ปกติ) ---
-async function renderImageContent(url) {
-    const container = document.getElementById('viewer');
-    container.innerHTML = ''; // ล้าง Viewer เดิม
-    if (viewer) { viewer.destroy(); viewer = null; }
-
+// --- 360 Viewer Management ---
+function update360Viewer(url) {
+    if (viewer) viewer.destroy();
     if (!url) {
-        container.innerHTML = '<p style="color:#666;">ยังไม่มีรูปภาพ</p>';
+        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%;">ยังไม่มีภาพ 360 องศา</div>';
         return;
     }
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = url;
     
-    img.onload = () => {
-        const ratio = img.width / img.height;
-        // สูตร: ถ้ากว้างเป็น 2 เท่าของสูง (ค่าความคลาดเคลื่อน 10%) = 360 องศา
-        if (Math.abs(ratio - 2) < 0.2) {
-            viewer = pannellum.viewer('viewer', {
-                type: "equirectangular",
-                panorama: url,
-                autoLoad: true
-            });
-        } else {
-            container.innerHTML = `<img src="${url}" id="preview-img">`;
-        }
-    };
-    
-    img.onerror = () => {
-        container.innerHTML = '<p style="color:red;">ไม่สามารถโหลดรูปภาพจาก Google Drive ได้ (อาจติดปัญหา CORS หรือ Link เสีย)</p>';
-    };
+    viewer = pannellum.viewer('viewer', {
+        type: "equirectangular",
+        panorama: url,
+        autoLoad: true,
+        crossOrigin: "anonymous",
+        errorText: "ไม่สามารถโหลดภาพจาก Google Drive ได้ (ติดปัญหา CORS)"
+    });
 }
 
-// --- การอัปโหลดไฟล์ไป Google Drive ---
+// --- Upload & Google Drive ---
 async function handleFileUpload(input) {
     const file = input.files[0];
     if (!file || !curId) return;
 
     const status = document.getElementById('uploadStatus');
-    status.innerText = "⏳ กำลังส่งไฟล์ไป Google Drive...";
+    status.innerText = "⏳ กำลังอัปโหลดไปยัง Google Drive...";
 
     try {
         const driveLink = await uploadToDrive(file);
         await db.ref(`points/${curId}`).update({ image: driveLink });
-        status.innerText = "✅ บันทึกสำเร็จ!";
-        renderImageContent(driveLink);
+        status.innerText = "✅ อัปโหลดและแชร์สำเร็จ!";
+        update360Viewer(driveLink);
     } catch (e) {
         status.innerText = "❌ ผิดพลาด: " + e.message;
     } finally {
@@ -166,41 +157,41 @@ async function handleFileUpload(input) {
 
 async function uploadToDrive(file) {
     return new Promise((resolve, reject) => {
-        tokenClient.callback = async (response) => {
-            if (response.error) reject(response);
-
-            const metadata = { name: `img_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
+        tokenClient.callback = async (resp) => {
+            if (resp.error) reject(resp);
+            
+            const metadata = { name: `pano_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
             const formData = new FormData();
             formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
             formData.append('file', file);
 
             const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + response.access_token },
+                headers: { 'Authorization': 'Bearer ' + resp.access_token },
                 body: formData
             });
             const driveFile = await res.json();
 
-            // Set Permission: Anyone with link can view
+            // Set Permission: Public Read
             await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + response.access_token, 'Content-Type': 'application/json' },
+                headers: { 'Authorization': 'Bearer ' + resp.access_token, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role: 'reader', type: 'anyone' })
             });
 
+            // Return Direct Link (Note: uc?id=... may have CORS issues in some regions)
             resolve(`https://docs.google.com/uc?export=view&id=${driveFile.id}`);
         };
-        tokenClient.requestAccessToken({ prompt: gapi.client.getToken() === null ? 'consent' : '' });
+        tokenClient.requestAccessToken({ prompt: 'consent' });
     });
 }
 
-// --- UI Functions ---
+// --- UI Logic ---
 function renderTree() {
     const list = document.getElementById('tree-list');
     list.innerHTML = dataList.map(p => `
         <div class="list-item" onclick="enterEdit('${p.id}')">
-            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
-            <span style="font-size: 0.7em; color: #999;">${p.image ? '🖼️ มีรูป' : '⚪ ว่าง'}</span>
+            📍 ${p.name || 'ไม่มีชื่อ'} ${p.image ? '🌐' : ''}
         </div>
     `).join('');
 }
@@ -211,20 +202,18 @@ function enterEdit(id) {
     document.getElementById('edit-panel').style.display = 'block';
     document.getElementById('pName').value = p.name;
     document.getElementById('uploadStatus').innerText = "";
-    renderImageContent(p.image);
+    update360Viewer(p.image);
     map.panTo([p.lat, p.lon]);
 }
 
 function addNewPoint() {
     const center = map.getCenter();
-    const newPoint = {
-        name: "จุดใหม่ " + new Date().toLocaleTimeString(),
+    db.ref('points').push({
+        name: "จุดใหม่ 360",
         lat: center.lat,
         lon: center.lng,
-        image: "",
-        createdAt: Date.now()
-    };
-    db.ref('points').push(newPoint);
+        image: ""
+    });
 }
 
 let typingTimer;
@@ -237,7 +226,7 @@ function updateName() {
 }
 
 function deletePoint() {
-    if (confirm('ยืนยันการลบจุดนี้?')) {
+    if (confirm('ลบจุด 360 นี้?')) {
         db.ref(`points/${curId}`).remove();
         exitEdit();
     }
@@ -246,7 +235,7 @@ function deletePoint() {
 function exitEdit() {
     document.getElementById('edit-panel').style.display = 'none';
     curId = null;
-    document.getElementById('viewer').innerHTML = '';
+    if (viewer) viewer.destroy();
 }
 </script>
 </body>
