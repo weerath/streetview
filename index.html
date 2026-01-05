@@ -3,338 +3,342 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Master SV Editor - Firebase & Google Drive</title>
+    <title>360 VR Editor Pro - Firebase Storage</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 
     <style>
-        :root { --accent: #2196f3; --red: #ff5252; --green: #4caf50; --dark: #1a1a1a; }
-        body { margin: 0; height: 100vh; display: flex; font-family: -apple-system, sans-serif; overflow: hidden; background: #000; }
-        #sidebar { width: 340px; height: 100%; position: relative; background: #fff; z-index: 2000; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
-        .panel { position: absolute; top:0; left:0; width:100%; height:100%; display: flex; flex-direction: column; background: #fff; transition: 0.3s; z-index: 10; }
-        .panel.hidden { display: none; }
-        .point-header { padding: 8px 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; cursor: pointer; }
-        .point-header.active { background: #fff1f0; border-left: 5px solid var(--red); }
-        .btn-edit-sm { background: var(--accent); color: white; border: none; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 10px; opacity: 0.7; }
-        .hs-tree { padding-left: 30px; background: #fafafa; display: none; }
-        .hs-tree.show { display: block; }
-        .pnlm-hotspot-base { background: none !important; border: none !important; width: auto !important; height: auto !important; }
-        .hs-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; text-shadow: 0 1px 4px #000; cursor: pointer; }
-        .pnlm-drag-active { opacity: 0.5; filter: drop-shadow(0 0 10px yellow); }
-        #main-content { flex: 1; position: relative; z-index: 1; }
-        #viewer, #map-full { position: absolute; top:0; left:0; width:100%; height:100%; }
-        #map-full { z-index: 5; visibility: hidden; background: #eee; }
-        #viewer { z-index: 10; }
-        #main-content.map-active #map-full { visibility: visible; z-index: 20; }
-        .scroll { flex: 1; overflow-y: auto; padding: 15px; }
-        input, select, button { width: 100%; margin-bottom: 8px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
-        .master-zone { background: #fff1f0; padding: 10px; border: 1px solid #ffa39e; border-radius: 8px; margin-bottom: 10px; }
-        .icon-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 10px; }
-        .icon-btn { padding: 6px; border: 1px solid #eee; border-radius: 4px; text-align: center; cursor: pointer; background: #f9f9f9; font-size: 18px; }
-        .icon-btn.active { border-color: var(--accent); background: #e3f2fd; }
-        .color-dot { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid #ddd; }
-        .adj-box { display: flex; align-items: center; justify-content: space-between; background: #f9f9f9; padding: 6px; border-radius: 6px; margin-bottom: 6px; }
-        .adj-btn { width: 28px; height: 28px; border: 1px solid #ddd; background: #fff; cursor: pointer; border-radius: 4px; }
-        .marker-red { filter: hue-rotate(150deg) saturate(2); z-index: 1000 !important; }
-        .status-msg { padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; }
-        .status-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #4caf50; }
-        .status-error { background: #ffebee; color: #c62828; border: 1px solid #f44336; }
+        :root { --accent: #007bff; --red: #dc3545; --dark: #212529; }
+        body { margin: 0; height: 100vh; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #000; }
+        
+        /* Sidebar */
+        #sidebar { width: 350px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
+        #map-container { height: 250px; width: 100%; border-bottom: 1px solid #dee2e6; }
+        .panel { padding: 20px; overflow-y: auto; flex-grow: 1; }
+        
+        /* Viewer */
+        #viewer-container { flex-grow: 1; position: relative; background: #000; }
+        #viewer { width: 100%; height: 100%; }
+        
+        /* UI Elements */
+        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .list-item { padding: 12px; border-bottom: 1px solid #f1f1f1; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        .list-item:hover { background: #f8f9fa; border-left: 4px solid var(--accent); }
+        
+        /* Edit Overlay */
+        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+        .status-text { font-size: 0.85em; color: var(--accent); text-align: center; margin-top: 8px; font-weight: bold; }
+        
+        /* Upload Zone */
+        .upload-zone { border: 2px dashed #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa; transition: 0.2s; }
+        .upload-zone:hover { border-color: var(--accent); background: #e9f5ff; }
+        .preview-img { max-width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+        
+        /* Progress Bar */
+        .progress-bar { width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin-top: 10px; display: none; }
+        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <div id="panel-list" class="panel">
-        <div style="padding:15px; border-bottom:1px solid #eee;">
-            <button style="background:var(--green); color:white; font-weight:bold; margin-bottom:10px;" onclick="addNewPoint()">➕ เพิ่มจุด Panorama ใหม่</button>
-            <input type="text" id="searchInput" placeholder="🔍 ค้นหาจุด หรือ Hotspot..." oninput="renderTree()">
-        </div>
-        <div class="scroll" id="treeRoot"></div>
+    <div id="map-container"></div>
+    <div class="panel">
+        <h3 style="margin-top:0;">📍 จุดถ่าย 360°</h3>
+        <button class="btn btn-primary" onclick="addNewPoint()">+ เพิ่มจุดใหม่</button>
+        <div id="tree-list" style="margin-top: 15px;"></div>
     </div>
 
-    <div id="panel-edit" class="panel hidden">
-        <div style="padding:15px; border-bottom:1px solid #ddd;">
-            <button onclick="exitEdit()" style="background:var(--accent); color:white; border:none; padding:10px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">✅ เสร็จสิ้น (บันทึกอัตโนมัติ)</button>
-        </div>
-        <div class="scroll">
-            <div id="statusBox"></div>
-            <label>ชื่อจุด</label><input id="pName" type="text" oninput="updateName()">
-            <label>🔗 รูปจาก Google Drive (Share Link)</label>
-            <button onclick="updateImageFromDrive()" style="background:#e3f2fd; color:var(--accent); border:1px solid var(--accent);">📁 เปลี่ยนรูปจาก Drive</button>
-            <div id="currentImage" style="font-size:11px; color:#666; margin-bottom:10px;"></div>
-            <button style="background:#ef6c00; color:white;" onclick="saveStartView()">📸 ล็อคมุมมองเริ่มต้น</button>
-            <hr>
-            <div class="master-zone">
-                <button id="masterEditBtn" style="background:var(--dark); color:white; font-weight:bold;" onclick="toggleMasterEdit()">🛠️ Master HotSpot Edit: OFF</button>
+    <div id="edit-panel" class="edit-overlay">
+        <h3>✏️ แก้ไขข้อมูลจุด 360</h3>
+        
+        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ชื่อสถานที่:</label>
+        <input type="text" id="pName" placeholder="ระบุชื่อสถานที่..." style="width:100%; padding:10px; margin-bottom: 20px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;" oninput="updateName()">
+        
+        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ภาพ 360 องศา:</label>
+        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size: 48px;">🌐</div>
+            <p style="margin: 10px 0 5px 0; font-weight: 600;">คลิกเพื่ออัปโหลดภาพ Equirectangular</p>
+            <p style="margin: 0; font-size: 0.85em; color: #6c757d;">รองรับ JPG, PNG (แนะนำอัตราส่วน 2:1)</p>
+            <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
+            
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
             </div>
-            <h4 style="margin:10px 0">รายการ Hotspots</h4>
-            <div id="hsTreeEdit"></div>
-            <button style="color:red; border:1px solid red; background:none; margin-top:30px; font-size:12px;" onclick="deletePoint()">🗑️ ลบจุดนี้</button>
+            <div id="uploadStatus" class="status-text"></div>
+            <img id="previewImg" class="preview-img" style="display:none;">
         </div>
+
+        <button class="btn" style="background:#f1f1f1; margin-top:30px;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
+        <button class="btn" style="background:var(--red); color:white;" onclick="deletePoint()">🗑️ ลบจุดนี้</button>
     </div>
 </div>
 
-<div id="main-content">
-    <div style="position:absolute; bottom:20px; right:20px; z-index:1001;">
-        <button onclick="switchView()" style="padding:12px 24px; border-radius:30px; background:var(--dark); color:white; border:none; cursor:pointer; font-weight:bold;">🗺️ Switch Map/360</button>
-    </div>
-    <div id="map-full"></div>
+<div id="viewer-container">
     <div id="viewer"></div>
 </div>
 
-<div id="hsModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#fff; padding:20px; border-radius:15px; z-index:3000; width:330px; box-shadow:0 15px 50px rgba(0,0,0,0.5);">
-    <h3 style="margin-top:0">ตั้งค่า Hotspot</h3>
-    <select id="mType" onchange="toggleMFields()">
-        <option value="info">💬 ข้อความ</option>
-        <option value="scene">🔗 เชื่อมไปจุดอื่น</option>
-        <option value="url">🌐 ลิงก์ภายนอก</option>
-    </select>
-    <div id="mSceneBox" style="display:none;"><label>ไปที่จุด:</label><select id="mTarget"></select></div>
-    <label>ข้อความ:</label><input id="mText" type="text">
-    <div id="mUrlBox" style="display:none;"><label>URL:</label><input id="mUrl" type="text" placeholder="https://..."></div>
-    <label>Icon:</label>
-    <div class="icon-grid" id="iconPalette">
-        <div class="icon-btn active" onclick="selI('',this)">✖</div>
-        <div class="icon-btn" onclick="selI('⬆️',this)">⬆️</div><div class="icon-btn" onclick="selI('⬇️',this)">⬇️</div>
-        <div class="icon-btn" onclick="selI('📍',this)">📍</div><div class="icon-btn" onclick="selI('🏠',this)">🏠</div>
-    </div>
-    <input type="hidden" id="mIcon" value="">
-    <div class="adj-box"><span>Icon Size: <b id="iSizeVal">24</b>px</span>
-        <div><button class="adj-btn" onclick="adjVal('mIconSize', -2, 'iSizeVal')">-</button><button class="adj-btn" onclick="adjVal('mIconSize', 2, 'iSizeVal')">+</button></div>
-    </div>
-    <input type="hidden" id="mIconSize" value="24">
-    <div class="adj-box"><span>Font Size: <b id="fSizeVal">14</b>px</span>
-        <div><button class="adj-btn" onclick="adjVal('mFontSize', -1, 'fSizeVal')">-</button><button class="adj-btn" onclick="adjVal('mFontSize', 1, 'fSizeVal')">+</button></div>
-    </div>
-    <input type="hidden" id="mFontSize" value="14">
-    <label>สี:</label>
-    <div style="display:flex; gap:10px; margin-bottom:15px;">
-        <div class="color-dot" style="background:#ffffff" onclick="selC('#ffffff',this)"></div>
-        <div class="color-dot" style="background:#ffeb3b" onclick="selC('#ffeb3b',this)"></div>
-        <div class="color-dot" style="background:#ff5252" onclick="selC('#ff5252',this)"></div>
-    </div>
-    <input type="hidden" id="mColor" value="#ffffff">
-    <button onclick="saveHS()" style="background:var(--accent); color:white; font-weight:bold;">บันทึก</button>
-    <button onclick="document.getElementById('hsModal').style.display='none'" style="background:none; border:none; color:gray; cursor:pointer;">ยกเลิก</button>
-</div>
-
 <script>
-// --- CONFIGURATION ---
+// --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "...",
-    appId: "..."
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    appId: "YOUR_APP_ID"
 };
-// ---------------------
 
+// Global Variables
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-let data=[], curId=null, viewer=null, map, markers=[], editMode=false, masterEdit=false, isDragging=false, dragIdx=null, currentView='viewer', editingIdx=null;
+let map, viewer, dataList = [], curId = null;
 
-// 1. Init
 window.onload = () => {
-    map=L.map('map-full',{attributionControl:false}).setView([13.75,100.5],13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    loadFromFirebase();
+    initMap();
+    loadFirebaseData();
 };
 
-function loadFromFirebase(){
-    db.ref('points').on('value', (snap) => {
-        data = snap.val() ? Object.values(snap.val()) : [];
-        renderTree();
-        if(curId) {
-            const p = data.find(x => x.id === curId);
-            if(p) loadViewer(p.startPitch, p.startYaw);
+function initMap() {
+    map = L.map('map-container', { attributionControl: false }).setView([13.75, 100.5], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
+    
+    // Add click handler to add points on map
+    map.on('click', (e) => {
+        if (curId) {
+            db.ref(`points/${curId}`).update({ 
+                lat: e.latlng.lat, 
+                lon: e.latlng.lng 
+            });
         }
     });
 }
 
-function saveToFirebase(){
-    db.ref('points').set(data).then(() => showStatus('success', '💾 บันทึกข้อมูลสำเร็จ!'));
-}
-
-// 2. Google Drive Helper
-function transformDriveUrl(url) {
-    if (url.includes('drive.google.com')) {
-        const id = url.split('/d/')[1].split('/')[0];
-        return `https://docs.google.com/uc?export=view&id=${id}`;
-    }
-    return url;
-}
-
-function updateImageFromDrive() {
-    const url = prompt("วาง Google Drive Share Link:");
-    if(url) {
-        const p = data.find(x => x.id === curId);
-        p.image = transformDriveUrl(url);
-        saveToFirebase();
-        updateImageDisplay();
-    }
-}
-
-// 3. UI logic (ยกมาจาก Code เดิม)
-function renderTree(){
-    const root = document.getElementById('treeRoot'), query = document.getElementById('searchInput').value.toLowerCase();
-    root.innerHTML = '';
-    const filtered = data.filter(p => p.name.toLowerCase().includes(query) || (p.hotSpots||[]).some(h => (h.text||"").toLowerCase().includes(query)));
-    
-    filtered.forEach(p => {
-        const wrap = document.createElement('div');
-        wrap.className = 'point-item';
-        wrap.innerHTML = `
-            <div class="point-header ${p.id === curId ? 'active' : ''}">
-                <span style="flex:1" onclick="selectPoint('${p.id}');toggleTree('${p.id}')">📍 ${p.name}</span>
-                <button class="btn-edit-sm" onclick="event.stopPropagation();enterEdit('${p.id}')">✏️</button>
-            </div>
-            <div id="tree-${p.id}" class="hs-tree ${p.id === curId ? 'show' : ''}"></div>`;
-        
-        const tree = wrap.querySelector(`#tree-${p.id}`);
-        (p.hotSpots || []).forEach((h, i) => {
-            const leaf = document.createElement('div');
-            leaf.style = "padding:6px 35px;font-size:12px;color:#666;cursor:pointer;";
-            leaf.innerHTML = `${h.icon || '•'} ${h.text || h.type}`;
-            leaf.onclick = () => focusHS(p.id, i);
-            tree.appendChild(leaf);
-        });
-        root.appendChild(wrap);
+function loadFirebaseData() {
+    db.ref('points').on('value', (snap) => {
+        const val = snap.val();
+        dataList = val ? Object.keys(val).map(key => ({...val[key], id: key})) : [];
+        renderTree();
+        updateMapMarkers();
     });
-    updateMarkers(filtered);
 }
 
-function loadViewer(pPitch = null, pYaw = null){
-    const p = data.find(x => x.id === curId);
-    if(!p || !p.image) {
-        document.getElementById('viewer').innerHTML = '<div style="color:#fff; padding:20px;">เลือกจุดหรือใส่รูปจาก Drive</div>';
+function updateMapMarkers() {
+    map.eachLayer((layer) => {
+        if (layer instanceof L.Marker) map.removeLayer(layer);
+    });
+    
+    dataList.forEach(p => {
+        const marker = L.marker([p.lat, p.lon])
+            .addTo(map)
+            .bindPopup(`<b>${p.name || 'ไม่มีชื่อ'}</b>`)
+            .on('click', () => enterEdit(p.id));
+    });
+}
+
+// --- 360 Viewer Management ---
+function update360Viewer(imageData) {
+    if (viewer) viewer.destroy();
+    
+    if (!imageData) {
+        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">📷 ยังไม่มีภาพ 360 องศา<br><span style="font-size: 0.8em; color: #888;">อัปโหลดภาพในแผงด้านซ้าย</span></div>';
         return;
     }
-    const cp = pPitch ?? (viewer ? viewer.getPitch() : (p.startPitch || 0));
-    const cy = pYaw ?? (viewer ? viewer.getYaw() : (p.startYaw || 0));
     
-    if(viewer) viewer.destroy();
     viewer = pannellum.viewer('viewer', {
-        type: 'equirectangular', panorama: p.image, autoLoad: true, pitch: cp, yaw: cy,
-        hotSpots: (p.hotSpots || []).map((h, i) => ({
-            pitch: h.pitch, yaw: h.yaw, type: 'info',
-            createTooltipFunc: (el) => {
-                const wrap = document.createElement('div'); wrap.className = 'hs-wrap'; wrap.style.color = h.color || '#fff';
-                if(h.icon) { const ico = document.createElement('div'); ico.style.fontSize = (h.iconSize || 24) + "px"; ico.innerText = h.icon; wrap.appendChild(ico); }
-                if(h.text) { const txt = document.createElement('div'); txt.style.fontSize = (h.fontSize || 14) + "px"; txt.innerText = h.text; wrap.appendChild(txt); }
-                el.appendChild(wrap);
-                if(masterEdit) el.onmousedown = (e) => { e.stopPropagation(); isDragging = true; dragIdx = i; el.classList.add('pnlm-drag-active'); }
-            },
-            clickHandlerFunc: () => {
-                if(masterEdit) openHS(i, h.pitch, h.yaw);
-                else if(h.type === 'scene') selectPoint(h.targetId);
-                else if(h.type === 'url') window.open(h.url, '_blank');
+        type: "equirectangular",
+        panorama: imageData,
+        autoLoad: true,
+        showControls: true,
+        compass: true,
+        autoRotate: -2,
+        mouseZoom: true,
+        hfov: 100
+    });
+}
+
+// --- Upload Handler with Base64 & Compression ---
+async function handleFileUpload(input) {
+    const file = input.files[0];
+    if (!file || !curId) return;
+
+    const status = document.getElementById('uploadStatus');
+    const progress = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const preview = document.getElementById('previewImg');
+    
+    status.innerText = "⏳ กำลังประมวลผลภาพ...";
+    progress.style.display = 'block';
+    progressFill.style.width = '30%';
+
+    try {
+        // Read and compress image
+        const base64Data = await compressAndConvertToBase64(file, (percent) => {
+            progressFill.style.width = percent + '%';
+        });
+        
+        progressFill.style.width = '80%';
+        status.innerText = "💾 กำลังบันทึกลง Firebase...";
+        
+        // Save to Firebase
+        await db.ref(`points/${curId}`).update({ image: base64Data });
+        
+        progressFill.style.width = '100%';
+        status.innerText = "✅ อัปโหลดสำเร็จ!";
+        
+        // Update viewer and preview
+        update360Viewer(base64Data);
+        preview.src = base64Data;
+        preview.style.display = 'block';
+        
+        setTimeout(() => {
+            progress.style.display = 'none';
+            progressFill.style.width = '0%';
+        }, 2000);
+        
+    } catch (e) {
+        status.innerText = "❌ ผิดพลาด: " + e.message;
+        progress.style.display = 'none';
+    } finally {
+        input.value = '';
+    }
+}
+
+function compressAndConvertToBase64(file, progressCallback) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onprogress = (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 50);
+                progressCallback(percent);
             }
-        }))
-    });
-
-    viewer.on('mousedown', (e) => {
-        if(masterEdit && !isDragging && !e.target.closest('.pnlm-hotspot')){
-            const c = viewer.mouseEventToCoords(e);
-            openHS(null, c[0], c[1]);
-        }
+        };
+        
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                // Calculate new dimensions (max 4096px for performance)
+                let width = img.width;
+                let height = img.height;
+                const maxSize = 4096;
+                
+                if (width > maxSize || height > maxSize) {
+                    if (width > height) {
+                        height = Math.round((height * maxSize) / width);
+                        width = maxSize;
+                    } else {
+                        width = Math.round((width * maxSize) / height);
+                        height = maxSize;
+                    }
+                }
+                
+                progressCallback(60);
+                
+                // Create canvas and compress
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                progressCallback(70);
+                
+                // Convert to base64 (JPEG with 0.85 quality)
+                const base64 = canvas.toDataURL('image/jpeg', 0.85);
+                resolve(base64);
+            };
+            img.onerror = () => reject(new Error('ไม่สามารถโหลดภาพได้'));
+            img.src = e.target.result;
+        };
+        
+        reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
+        reader.readAsDataURL(file);
     });
 }
 
-// คลุม Drag Hotspot
-document.addEventListener('mouseup', (e) => {
-    if(!isDragging) return;
-    const c = viewer.mouseEventToCoords(e);
-    if(c) {
-        const p = data.find(x => x.id === curId);
-        p.hotSpots[dragIdx].pitch = c[0]; p.hotSpots[dragIdx].yaw = c[1];
-        saveToFirebase();
+// --- UI Logic ---
+function renderTree() {
+    const list = document.getElementById('tree-list');
+    if (dataList.length === 0) {
+        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">ยังไม่มีจุด 360<br>คลิก + เพื่อเพิ่มจุดใหม่</div>';
+        return;
     }
-    isDragging = false;
-});
+    
+    list.innerHTML = dataList.map(p => `
+        <div class="list-item" onclick="enterEdit('${p.id}')">
+            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
+            <span>${p.image ? '🌐' : '⚪'}</span>
+        </div>
+    `).join('');
+}
 
-// ฟังก์ชันเสริมอื่นๆ
-function selectPoint(id){ curId = id; renderTree(); const p = data.find(x => x.id === id); if(p && p.lat) map.setView([p.lat, p.lon], 16); loadViewer(p.startPitch, p.startYaw); }
-function enterEdit(id){ curId = id; editMode = true; selectPoint(id); document.getElementById('panel-list').classList.add('hidden'); document.getElementById('panel-edit').classList.remove('hidden'); updateImageDisplay(); renderEditHSTree(); }
-function exitEdit(){ editMode = false; masterEdit = false; document.getElementById('panel-edit').classList.add('hidden'); document.getElementById('panel-list').classList.remove('hidden'); saveToFirebase(); }
-function addNewPoint(){ const id = 'p' + Date.now(); data.push({ id, name: "จุดใหม่", hotSpots: [], lat: map.getCenter().lat, lon: map.getCenter().lng }); saveToFirebase(); enterEdit(id); }
-function updateName(){ data.find(x => x.id === curId).name = document.getElementById('pName').value; renderTree(); }
-function saveStartView(){ const p = data.find(x => x.id === curId); p.startYaw = viewer.getYaw(); p.startPitch = viewer.getPitch(); saveToFirebase(); }
-function deletePoint(){ if(confirm('ลบจุดนี้?')){ data = data.filter(x => x.id !== curId); saveToFirebase(); exitEdit(); } }
-function toggleMasterEdit(){ masterEdit = !masterEdit; document.getElementById('masterEditBtn').innerText = masterEdit ? "⚠️ Master Edit: ON" : "🛠️ Master HotSpot Edit: OFF"; loadViewer(); renderEditHSTree(); }
+function enterEdit(id) {
+    curId = id;
+    const p = dataList.find(x => x.id === id);
+    
+    document.getElementById('edit-panel').style.display = 'block';
+    document.getElementById('pName').value = p.name || '';
+    document.getElementById('uploadStatus').innerText = "";
+    document.getElementById('progressBar').style.display = 'none';
+    document.getElementById('progressFill').style.width = '0%';
+    
+    const preview = document.getElementById('previewImg');
+    if (p.image) {
+        preview.src = p.image;
+        preview.style.display = 'block';
+    } else {
+        preview.style.display = 'none';
+    }
+    
+    update360Viewer(p.image);
+    map.panTo([p.lat, p.lon], { animate: true });
+}
 
-function openHS(idx, p, y){
-    editingIdx = idx; window.tC = { p, y };
-    document.getElementById('mTarget').innerHTML = data.map(x => `<option value="${x.id}">${x.name}</option>`).join('');
-    document.getElementById('hsModal').style.display = 'block';
-    if(idx !== null){
-        const h = data.find(x => x.id === curId).hotSpots[idx];
-        document.getElementById('mType').value = h.type;
-        document.getElementById('mText').value = h.text || "";
-        document.getElementById('mIcon').value = h.icon || "";
-        document.getElementById('mTarget').value = h.targetId || "";
+function addNewPoint() {
+    const center = map.getCenter();
+    const newRef = db.ref('points').push({
+        name: "จุดใหม่ " + (dataList.length + 1),
+        lat: center.lat,
+        lon: center.lng,
+        image: ""
+    });
+    
+    // Auto-open edit panel for new point
+    setTimeout(() => enterEdit(newRef.key), 300);
+}
+
+let typingTimer;
+function updateName() {
+    clearTimeout(typingTimer);
+    const newName = document.getElementById('pName').value;
+    typingTimer = setTimeout(() => {
+        if (curId) db.ref(`points/${curId}`).update({ name: newName });
+    }, 500);
+}
+
+function deletePoint() {
+    if (confirm('⚠️ ต้องการลบจุด 360 นี้หรือไม่?')) {
+        db.ref(`points/${curId}`).remove();
+        exitEdit();
     }
 }
 
-function saveHS(){
-    const p = data.find(x => x.id === curId);
-    const hs = { 
-        pitch: window.tC.p, yaw: window.tC.y, 
-        type: document.getElementById('mType').value, 
-        text: document.getElementById('mText').value, 
-        icon: document.getElementById('mIcon').value,
-        iconSize: parseInt(document.getElementById('mIconSize').value),
-        fontSize: parseInt(document.getElementById('mFontSize').value),
-        color: document.getElementById('mColor').value,
-        targetId: document.getElementById('mTarget').value,
-        url: document.getElementById('mUrl').value
-    };
-    if(editingIdx !== null) p.hotSpots[editingIdx] = hs; else p.hotSpots.push(hs);
-    document.getElementById('hsModal').style.display = 'none';
-    saveToFirebase();
+function exitEdit() {
+    document.getElementById('edit-panel').style.display = 'none';
+    curId = null;
+    if (viewer) viewer.destroy();
+    document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">👈 เลือกจุด 360 จากด้านซ้าย</div>';
 }
-
-function updateMarkers(filtered){
-    markers.forEach(m => map.removeLayer(m));
-    markers = filtered.map(p => {
-        const isCur = p.id === curId;
-        const m = L.marker([p.lat, p.lon], { 
-            draggable: editMode && isCur,
-            icon: L.icon({ iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className: isCur ? 'marker-red' : '' })
-        }).addTo(map);
-        m.on('dragend', (e) => { const pos = e.target.getLatLng(); p.lat = pos.lat; p.lon = pos.lng; saveToFirebase(); });
-        m.on('click', () => selectPoint(p.id));
-        return m;
-    });
-}
-
-function renderEditHSTree(){
-    const c = document.getElementById('hsTreeEdit'); c.innerHTML = '';
-    const p = data.find(x => x.id === curId);
-    (p.hotSpots || []).forEach((h, i) => {
-        const d = document.createElement('div');
-        d.style = "padding:8px; background:#f9f9f9; margin-bottom:5px; border-radius:8px; display:flex; justify-content:space-between;";
-        d.innerHTML = `<span>${h.icon || '•'} ${h.text || h.type}</span>
-            <button onclick="data.find(x => x.id === curId).hotSpots.splice(${i},1); saveToFirebase();" style="color:red; border:none; background:none; cursor:pointer;">✕</button>`;
-        c.appendChild(d);
-    });
-}
-
-function switchView(){ currentView = currentView === 'viewer' ? 'map' : 'viewer'; document.getElementById('main-content').classList.toggle('map-active', currentView === 'map'); if(currentView === 'map') setTimeout(() => map.invalidateSize(), 300); }
-function showStatus(type, msg){ const b = document.getElementById('statusBox'); b.innerHTML = `<div class="status-msg status-${type}">${msg}</div>`; setTimeout(() => b.innerHTML = '', 3000); }
-function updateImageDisplay(){ const p = data.find(x => x.id === curId); document.getElementById('currentImage').innerText = p.image ? "มีรูปภาพแล้ว" : "ยังไม่มีรูป"; }
-function toggleTree(id){ document.querySelectorAll('.hs-tree').forEach(t => t.classList.remove('show')); document.getElementById(`tree-${id}`).classList.add('show'); }
-function toggleMFields(){ const t = document.getElementById('mType').value; document.getElementById('mUrlBox').style.display = t === 'url' ? 'block' : 'none'; document.getElementById('mSceneBox').style.display = t === 'scene' ? 'block' : 'none'; }
-function selI(i, el){ document.getElementById('mIcon').value = i; document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
-function selC(c, el){ document.getElementById('mColor').value = c; }
-function adjVal(id, step, disp){ let e = document.getElementById(id); e.value = parseInt(e.value)+step; document.getElementById(disp).innerText = e.value; }
 </script>
 </body>
 </html>
