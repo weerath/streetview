@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>360 VR Editor Pro - Google Drive & Firebase</title>
+    <title>360 VR Editor Pro - Test Mode</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
@@ -13,7 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 
     <style>
-        :root { --accent: #007bff; --red: #dc3545; --dark: #212529; }
+        :root { --accent: #007bff; --red: #dc3545; --dark: #212529; --test: #ffc107; }
         body { margin: 0; height: 100vh; display: flex; font-family: 'Segoe UI', sans-serif; overflow: hidden; background: #000; }
         #sidebar { width: 350px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
         #map-container { height: 250px; width: 100%; border-bottom: 1px solid #dee2e6; }
@@ -30,9 +30,12 @@
         .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
         .status-text { font-size: 0.85em; color: var(--accent); text-align: center; margin-top: 8px; font-weight: bold; }
         .preview-img { max-width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+        .test-badge { background: var(--test); color: #000; padding: 4px 8px; border-radius: 4px; font-size: 12px; position: absolute; top: 10px; right: 10px; z-index: 3000; font-weight: bold; }
     </style>
 </head>
 <body>
+
+<div id="test-indicator" class="test-badge" style="display:none;">🛠 TEST MODE (No Database)</div>
 
 <div id="sidebar">
     <div id="map-container"></div>
@@ -58,10 +61,14 @@
     </div>
 </div>
 
-<div id="viewer-container"><div id="viewer"></div></div>
+<div id="viewer-container">
+    <div id="viewer"></div>
+</div>
 
 <script>
 // --- CONFIGURATION ---
+const IS_TEST_MODE = true; // *** เปลี่ยนเป็น false เมื่อต้องการใช้ Firebase/Drive จริง ***
+
 const firebaseConfig = {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_PROJECT.firebaseapp.com",
@@ -70,30 +77,74 @@ const firebaseConfig = {
     storageBucket: "YOUR_PROJECT.appspot.com",
     appId: "YOUR_APP_ID"
 };
-const GAS_WEBAPP_URL = "URL_จาก_GOOGLE_APPS_SCRIPT"; 
+const GAS_WEBAPP_URL = "YOUR_GAS_URL"; 
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-let map, viewer, dataList = [], curId = null;
+// Global Variables
+let db, map, viewer, dataList = [], curId = null;
 
-window.onload = () => { initMap(); loadFirebaseData(); };
+window.onload = () => {
+    if (IS_TEST_MODE) {
+        document.getElementById('test-indicator').style.display = 'block';
+        loadMockData();
+    } else {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        loadFirebaseData();
+    }
+    initMap();
+};
 
 function initMap() {
     map = L.map('map-container', { attributionControl: false }).setView([13.75, 100.5], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     map.on('click', (e) => {
-        if (curId) db.ref(`points/${curId}`).update({ lat: e.latlng.lat, lon: e.latlng.lng });
+        if (curId) updateData(curId, { lat: e.latlng.lat, lon: e.latlng.lng });
     });
+}
+
+// --- DATA MANAGEMENT ---
+function loadMockData() {
+    dataList = [
+        { id: '1', name: 'วัดพระแก้ว (Demo)', lat: 13.7515, lon: 100.4927, image: 'https://pannellum.org/images/alma.jpg' },
+        { id: '2', name: 'เสาชิงช้า (Demo)', lat: 13.7517, lon: 100.5012, image: '' }
+    ];
+    refreshUI();
 }
 
 function loadFirebaseData() {
     db.ref('points').on('value', (snap) => {
         const val = snap.val();
         dataList = val ? Object.keys(val).map(key => ({...val[key], id: key})) : [];
-        renderTree();
-        updateMapMarkers();
+        refreshUI();
     });
+}
+
+function updateData(id, payload) {
+    if (IS_TEST_MODE) {
+        const idx = dataList.findIndex(p => p.id === id);
+        if (idx !== -1) {
+            dataList[idx] = { ...dataList[idx], ...payload };
+            refreshUI();
+        }
+    } else {
+        db.ref(`points/${id}`).update(payload);
+    }
+}
+
+function refreshUI() {
+    renderTree();
+    updateMapMarkers();
+}
+
+// --- UI LOGIC ---
+function renderTree() {
+    const list = document.getElementById('tree-list');
+    list.innerHTML = dataList.map(p => `
+        <div class="list-item" onclick="enterEdit('${p.id}')">
+            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
+            <span>${p.image ? '✅' : '⚪'}</span>
+        </div>
+    `).join('');
 }
 
 function updateMapMarkers() {
@@ -109,59 +160,39 @@ async function handleFileUpload(input) {
 
     const status = document.getElementById('uploadStatus');
     const progress = document.getElementById('progressBar');
-    const progressFill = document.getElementById('progressFill');
+    const fill = document.getElementById('progressFill');
 
-    status.innerText = "⏳ กำลังบีบอัดและส่งไป Google Drive...";
+    status.innerText = "⏳ กำลังประมวลผล...";
     progress.style.display = 'block';
-    progressFill.style.width = '20%';
+    fill.style.width = '30%';
 
-    try {
-        const base64Data = await compressAndConvertToBase64(file, (p) => {
-            progressFill.style.width = (20 + (p * 0.3)) + '%';
-        });
-
-        // ส่งไป Google Apps Script
-        const response = await fetch(GAS_WEBAPP_URL, {
-            method: 'POST',
-            body: JSON.stringify({ base64: base64Data, fileName: file.name, mimeType: "image/jpeg" })
-        });
-        const result = await response.json();
-
-        if(result.status === "success") {
-            await db.ref(`points/${curId}`).update({ image: result.url });
-            status.innerText = "✅ บันทึกลง Drive สำเร็จ!";
-            update360Viewer(result.url);
-            document.getElementById('previewImg').src = result.url;
+    if (IS_TEST_MODE) {
+        // จำลองหน่วงเวลาอัปโหลด
+        setTimeout(() => {
+            fill.style.width = '100%';
+            status.innerText = "✅ Test Mode: จำลองการบันทึกสำเร็จ!";
+            const mockImg = "https://pannellum.org/images/cerro-toco-0.jpg";
+            updateData(curId, { image: mockImg });
+            update360Viewer(mockImg);
+            document.getElementById('previewImg').src = mockImg;
             document.getElementById('previewImg').style.display = 'block';
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (e) {
-        status.innerText = "❌ ผิดพลาด: " + e.message;
-    } finally {
-        setTimeout(() => { progress.style.display = 'none'; }, 2000);
+            setTimeout(() => { progress.style.display = 'none'; }, 1000);
+        }, 1500);
+    } else {
+        // โค้ดส่งไป Google Drive จริง (เหมือนที่เคยเขียนไว้)
+        try {
+            const base64Data = await compressAndConvertToBase64(file);
+            const response = await fetch(GAS_WEBAPP_URL, {
+                method: 'POST',
+                body: JSON.stringify({ base64: base64Data, fileName: file.name, mimeType: "image/jpeg" })
+            });
+            const result = await response.json();
+            if(result.status === "success") {
+                updateData(curId, { image: result.url });
+                update360Viewer(result.url);
+            }
+        } catch (e) { status.innerText = "❌ Error: " + e.message; }
     }
-}
-
-function compressAndConvertToBase64(file, progressCallback) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const maxSize = 2048; // ลดขนาดเพื่อส่งผ่าน API ได้เร็วขึ้น
-                let w = img.width, h = img.height;
-                if (w > maxSize) { h *= maxSize / w; w = maxSize; }
-                canvas.width = w; canvas.height = h;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, w, h);
-                resolve(canvas.toDataURL('image/jpeg', 0.8));
-            };
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
 }
 
 function update360Viewer(url) {
@@ -174,18 +205,8 @@ function update360Viewer(url) {
         type: "equirectangular",
         panorama: url,
         autoLoad: true,
-        crossOrigin: "anonymous" // สำคัญมากสำหรับ Google Drive
+        crossOrigin: "anonymous"
     });
-}
-
-function renderTree() {
-    const list = document.getElementById('tree-list');
-    list.innerHTML = dataList.map(p => `
-        <div class="list-item" onclick="enterEdit('${p.id}')">
-            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
-            <span>${p.image ? '✅' : '⚪'}</span>
-        </div>
-    `).join('');
 }
 
 function enterEdit(id) {
@@ -202,26 +223,57 @@ function enterEdit(id) {
 
 function addNewPoint() {
     const center = map.getCenter();
-    const newRef = db.ref('points').push({
-        name: "จุดใหม่ " + (dataList.length + 1),
-        lat: center.lat, lon: center.lng, image: ""
-    });
-    setTimeout(() => enterEdit(newRef.key), 300);
+    const newId = IS_TEST_MODE ? Date.now().toString() : db.ref('points').push().key;
+    const newPoint = { id: newId, name: "จุดใหม่ " + (dataList.length + 1), lat: center.lat, lon: center.lng, image: "" };
+    
+    if (IS_TEST_MODE) {
+        dataList.push(newPoint);
+        refreshUI();
+    } else {
+        db.ref(`points/${newId}`).set(newPoint);
+    }
+    setTimeout(() => enterEdit(newId), 300);
 }
 
 function updateName() {
     const name = document.getElementById('pName').value;
-    if (curId) db.ref(`points/${curId}`).update({ name: name });
+    if (curId) updateData(curId, { name: name });
 }
 
 function deletePoint() {
-    if (confirm('ลบจุดนี้?')) { db.ref(`points/${curId}`).remove(); exitEdit(); }
+    if (!confirm('ลบจุดนี้?')) return;
+    if (IS_TEST_MODE) {
+        dataList = dataList.filter(p => p.id !== curId);
+        refreshUI();
+    } else {
+        db.ref(`points/${curId}`).remove();
+    }
+    exitEdit();
 }
 
 function exitEdit() {
     document.getElementById('edit-panel').style.display = 'none';
     curId = null;
     update360Viewer(null);
+}
+
+function compressAndConvertToBase64(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.min(img.width, 2048);
+                canvas.height = canvas.width / (img.width/img.height);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
 }
 </script>
 </body>
