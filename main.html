@@ -1,118 +1,69 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
-    <script src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-</head>
-<body>
-
-<div id="sidebar">
-    <div style="padding: 10px; background: #f0f0f0;">
-        <button id="auth_btn" class="btn btn-blue" onclick="handleAuthClick()">🔑 เชื่อมต่อ Google Drive</button>
-    </div>
-    </div>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
 
 <script>
-// --- CONFIGURATION ---
-const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_API_KEY = 'YOUR_API_KEY';
-const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-
-const firebaseConfig = { /* ... ของเดิมของคุณ ... */ };
+// 2. ตั้งค่า Firebase Config (ใช้ค่าเดิมของคุณ)
+const firebaseConfig = {
+    apiKey: "...",
+    authDomain: "...",
+    databaseURL: "...",
+    projectId: "...",
+    storageBucket: "...", // ต้องมีตัวนี้เพื่ออัปโหลดไฟล์
+    appId: "..."
+};
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-// ---------------------
+const storage = firebase.storage(); // ประกาศใช้งาน Storage
 
-let tokenClient;
-let gapiInited = false;
-let gisInited = false;
+// 3. ฟังก์ชันอัปโหลดรูป (เลือกจากเครื่อง -> ขึ้น Storage -> เก็บ Link)
+async function uploadPanorama() {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file) return;
 
-// 1. จัดการ Google Auth
-function gapiLoaded() {
-    gapi.load('client', async () => {
-        await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: [DISCOVERY_DOC] });
-        gapiInited = true;
-    });
-}
-function gisLoaded() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: SCOPES,
-        callback: '', // จะระบุตอนกดปุ่ม
-    });
-    gisInited = true;
-}
-
-function handleAuthClick() {
-    tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) throw (resp);
-        document.getElementById('auth_btn').innerText = '✅ เชื่อมต่อแล้ว';
-    };
-    tokenClient.requestAccessToken({prompt: 'consent'});
-}
-
-// 2. ฟังก์ชันอัปโหลดรูปจาก Local ไป Google Drive
-async function uploadToDrive(file) {
-    const metadata = {
-        'name': `panorama_${Date.now()}.jpg`,
-        'mimeType': 'image/jpeg'
-    };
-
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', file);
-
-    try {
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-            method: 'POST',
-            headers: new Headers({ 'Authorization': 'Bearer ' + gapi.auth.getToken().access_token }),
-            body: form
-        });
-        const fileData = await response.json();
-        
-        // ตั้งค่าให้ไฟล์เป็น Public (Anyone with the link) เพื่อให้แสดงผลใน Pannellum ได้
-        await gapi.client.drive.permissions.create({
-            fileId: fileData.id,
-            resource: { role: 'reader', type: 'anyone' }
-        });
-
-        return fileData.id;
-    } catch (err) {
-        console.error('Upload error:', err);
-        alert('อัปโหลดล้มเหลว ตรวจสอบการเชื่อมต่อ Google Drive');
-    }
-}
-
-// 3. ปรับฟังก์ชันเลือกรูป (ในหน้า Edit)
-async function handleLocalFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file || !curId) return;
-
-    showStatus('⏳ กำลังอัปโหลดไป Google Drive...', '#ff9800');
+    // แสดงสถานะการทำงาน
+    const uz = document.getElementById('uploadZone');
+    uz.classList.add('uploading');
+    uz.innerHTML = '<div>⏳ กำลังอัปโหลดขึ้น Cloud...</div>';
     
-    const driveId = await uploadToDrive(file);
-    if (driveId) {
-        const directLink = `https://docs.google.com/uc?export=view&id=${driveId}`;
+    try {
+        // สร้างที่เก็บไฟล์ใน Storage (โฟลเดอร์ panoramas/ชื่อไฟล์)
+        const storageRef = storage.ref('panoramas/' + Date.now() + '-' + file.name);
         
-        // บันทึกลง Firebase
+        // เริ่มอัปโหลด
+        const snapshot = await storageRef.put(file);
+        
+        // รับ Download URL กลับมา
+        const downloadURL = await snapshot.ref.getDownloadURL();
+        
+        // นำ URL ที่ได้ไปบันทึกลงใน Data ของจุดปัจจุบัน
         const p = data.find(x => x.id === curId);
-        p.image = directLink;
+        p.image = downloadURL;
         
-        db.ref('points').set(data)
-            .then(() => {
-                showStatus('✅ บันทึกและแสดงผลสำเร็จ', '#4caf50');
-                loadViewer(directLink);
-            });
+        // บันทึก Database ทันที
+        saveToJSON(); 
+        
+        // อัปเดตหน้าจอ
+        updateImageDisplay();
+        loadViewer();
+        showStatus('success', '✅ อัปโหลดและบันทึกสำเร็จ!');
+        
+    } catch (e) {
+        console.error(e);
+        showStatus('error', '❌ อัปโหลดล้มเหลว: ' + e.message);
+    } finally {
+        uz.classList.remove('uploading');
+        uz.innerHTML = '<div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360</div>';
+        fileInput.value = '';
     }
 }
 
-// ในส่วน HTML ส่วนที่เลือกไฟล์
-// <input type="file" id="localFileInput" style="display:none" onchange="handleLocalFileSelect(event)">
-// <button class="btn btn-blue" onclick="document.getElementById('localFileInput').click()">เลือกรูปจากเครื่อง</button>
-
+// 4. ส่วนของ HTML (ส่วนของปุ่มเลือกไฟล์)
+/*
+   <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+       <div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360 จากเครื่อง</div>
+   </div>
+   <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="uploadPanorama()">
+*/
 </script>
-</body>
-</html>
