@@ -3,12 +3,16 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Master SV Editor - Google Drive</title>
+    <title>Master SV Editor - Firebase & Google Drive</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
     <style>
         :root { --accent: #2196f3; --red: #ff5252; --green: #4caf50; --dark: #1a1a1a; }
         body { margin: 0; height: 100vh; display: flex; font-family: -apple-system, sans-serif; overflow: hidden; background: #000; }
@@ -38,65 +42,31 @@
         .adj-box { display: flex; align-items: center; justify-content: space-between; background: #f9f9f9; padding: 6px; border-radius: 6px; margin-bottom: 6px; }
         .adj-btn { width: 28px; height: 28px; border: 1px solid #ddd; background: #fff; cursor: pointer; border-radius: 4px; }
         .marker-red { filter: hue-rotate(150deg) saturate(2); z-index: 1000 !important; }
-        .upload-zone { background: #f0f7ff; border: 2px dashed var(--accent); border-radius: 8px; padding: 15px; text-align: center; margin-bottom: 10px; cursor: pointer; }
-        .upload-zone:hover { background: #e3f2fd; }
-        .upload-zone.uploading { opacity: 0.6; pointer-events: none; }
         .status-msg { padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; }
         .status-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #4caf50; }
         .status-error { background: #ffebee; color: #c62828; border: 1px solid #f44336; }
-        .gdrive-login { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        .gdrive-status { padding: 8px 12px; background: #e8f5e9; border-radius: 8px; font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
     </style>
 </head>
 <body>
-<div id="sidebar">
-    <!-- Login Panel -->
-    <div id="panel-login" class="panel">
-        <div class="scroll" style="display: flex; align-items: center; justify-content: center;">
-            <div class="gdrive-login">
-                <h2 style="text-align: center; color: #1a1a1a;">🗺️ Master SV Editor</h2>
-                <p style="text-align: center; color: #666; font-size: 14px;">เชื่อมต่อกับ Google Drive เพื่อเริ่มใช้งาน</p>
-                <button id="loginBtn" onclick="handleAuth()" style="background: #4285f4; color: white; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                    <span>🔐</span> เข้าสู่ระบบด้วย Google
-                </button>
-                <div style="font-size: 11px; color: #999; text-align: center; margin-top: 10px;">
-                    ระบบจะสร้างโฟลเดอร์ "PanoramaDB" บน Google Drive ของคุณโดยอัตโนมัติ
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- List Panel -->
-    <div id="panel-list" class="panel hidden">
+<div id="sidebar">
+    <div id="panel-list" class="panel">
         <div style="padding:15px; border-bottom:1px solid #eee;">
-            <div class="gdrive-status">
-                <span>✅ เชื่อมต่อ Google Drive</span>
-                <button onclick="handleSignout()" style="margin: 0; padding: 4px 8px; font-size: 11px; width: auto; background: #ff5252; color: white;">ออกจากระบบ</button>
-            </div>
             <button style="background:var(--green); color:white; font-weight:bold; margin-bottom:10px;" onclick="addNewPoint()">➕ เพิ่มจุด Panorama ใหม่</button>
-            <input type="text" id="searchInput" placeholder="🔍 ค้นหาจุด หรือ ข้อความใน Hotspot..." oninput="renderTree()">
+            <input type="text" id="searchInput" placeholder="🔍 ค้นหาจุด หรือ Hotspot..." oninput="renderTree()">
         </div>
         <div class="scroll" id="treeRoot"></div>
-        <div style="padding:15px;">
-            <button onclick="saveToGDrive()" style="background:var(--dark); color:white; font-weight:bold;">💾 บันทึกลง Google Drive</button>
-            <button onclick="reloadFromGDrive()" style="background:#666; color:white; font-weight:bold; margin-top:5px;">🔄 โหลดข้อมูลจาก Drive</button>
-        </div>
     </div>
 
-    <!-- Edit Panel -->
     <div id="panel-edit" class="panel hidden">
         <div style="padding:15px; border-bottom:1px solid #ddd;">
-            <button onclick="exitEdit()" style="background:var(--accent); color:white; border:none; padding:10px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">✅ เสร็จสิ้น</button>
+            <button onclick="exitEdit()" style="background:var(--accent); color:white; border:none; padding:10px; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">✅ เสร็จสิ้น (บันทึกอัตโนมัติ)</button>
         </div>
         <div class="scroll">
             <div id="statusBox"></div>
-            <label>ชื่อจุดนี้</label><input id="pName" type="text" oninput="updateName()">
-            <label>📸 อัปโหลดรูป Panorama</label>
-            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-                <div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360</div>
-                <div style="font-size:11px; color:#666; margin-top:5px;">รองรับ JPG, PNG (ไม่เกิน 50MB)</div>
-            </div>
-            <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="uploadToGDrive()">
+            <label>ชื่อจุด</label><input id="pName" type="text" oninput="updateName()">
+            <label>🔗 รูปจาก Google Drive (Share Link)</label>
+            <button onclick="updateImageFromDrive()" style="background:#e3f2fd; color:var(--accent); border:1px solid var(--accent);">📁 เปลี่ยนรูปจาก Drive</button>
             <div id="currentImage" style="font-size:11px; color:#666; margin-bottom:10px;"></div>
             <button style="background:#ef6c00; color:white;" onclick="saveStartView()">📸 ล็อคมุมมองเริ่มต้น</button>
             <hr>
@@ -118,7 +88,6 @@
     <div id="viewer"></div>
 </div>
 
-<!-- Hotspot Modal -->
 <div id="hsModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#fff; padding:20px; border-radius:15px; z-index:3000; width:330px; box-shadow:0 15px 50px rgba(0,0,0,0.5);">
     <h3 style="margin-top:0">ตั้งค่า Hotspot</h3>
     <select id="mType" onchange="toggleMFields()">
@@ -127,15 +96,13 @@
         <option value="url">🌐 ลิงก์ภายนอก</option>
     </select>
     <div id="mSceneBox" style="display:none;"><label>ไปที่จุด:</label><select id="mTarget"></select></div>
-    <label>ข้อความที่แสดง:</label><input id="mText" type="text" placeholder="ชื่อเรียก">
+    <label>ข้อความ:</label><input id="mText" type="text">
     <div id="mUrlBox" style="display:none;"><label>URL:</label><input id="mUrl" type="text" placeholder="https://..."></div>
-    <label>เลือก Icon:</label>
+    <label>Icon:</label>
     <div class="icon-grid" id="iconPalette">
         <div class="icon-btn active" onclick="selI('',this)">✖</div>
         <div class="icon-btn" onclick="selI('⬆️',this)">⬆️</div><div class="icon-btn" onclick="selI('⬇️',this)">⬇️</div>
-        <div class="icon-btn" onclick="selI('⬅️',this)">⬅️</div><div class="icon-btn" onclick="selI('➡️',this)">➡️</div>
-        <div class="icon-btn" onclick="selI('🏢',this)">🏢</div><div class="icon-btn" onclick="selI('🏠',this)">🏠</div>
-        <div class="icon-btn" onclick="selI('🚻',this)">🚻</div><div class="icon-btn" onclick="selI('🚪',this)">🚪</div>
+        <div class="icon-btn" onclick="selI('📍',this)">📍</div><div class="icon-btn" onclick="selI('🏠',this)">🏠</div>
     </div>
     <input type="hidden" id="mIcon" value="">
     <div class="adj-box"><span>Icon Size: <b id="iSizeVal">24</b>px</span>
@@ -146,12 +113,11 @@
         <div><button class="adj-btn" onclick="adjVal('mFontSize', -1, 'fSizeVal')">-</button><button class="adj-btn" onclick="adjVal('mFontSize', 1, 'fSizeVal')">+</button></div>
     </div>
     <input type="hidden" id="mFontSize" value="14">
-    <label>เลือกสี:</label>
+    <label>สี:</label>
     <div style="display:flex; gap:10px; margin-bottom:15px;">
         <div class="color-dot" style="background:#ffffff" onclick="selC('#ffffff',this)"></div>
         <div class="color-dot" style="background:#ffeb3b" onclick="selC('#ffeb3b',this)"></div>
         <div class="color-dot" style="background:#ff5252" onclick="selC('#ff5252',this)"></div>
-        <div class="color-dot" style="background:#2196f3" onclick="selC('#2196f3',this)"></div>
     </div>
     <input type="hidden" id="mColor" value="#ffffff">
     <button onclick="saveHS()" style="background:var(--accent); color:white; font-weight:bold;">บันทึก</button>
@@ -159,364 +125,216 @@
 </div>
 
 <script>
-// ========================================
-// Google Drive API Configuration
-// ========================================
-const CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com'; // ⚠️ ต้องเปลี่ยนเป็นของคุณ
-const API_KEY = 'YOUR_API_KEY'; // ⚠️ ต้องเปลี่ยนเป็นของคุณ
-const DISCOVERY_DOCS = ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'];
-const SCOPES = 'https://www.googleapis.com/auth/drive.file';
-const FOLDER_NAME = 'PanoramaDB';
-const DB_FILENAME = 'panorama_data.json';
+// --- CONFIGURATION ---
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "...",
+    appId: "..."
+};
+// ---------------------
 
-let gapiInited = false;
-let gisInited = false;
-let tokenClient;
-let accessToken = null;
-let folderID = null;
-let dbFileID = null;
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+let data=[], curId=null, viewer=null, map, markers=[], editMode=false, masterEdit=false, isDragging=false, dragIdx=null, currentView='viewer', editingIdx=null;
 
-// ========================================
-// Application State
-// ========================================
-let data = [];
-let curId = null;
-let viewer = null;
-let map, markers = [];
-let editMode = false;
-let masterEdit = false;
-let isDragging = false;
-let dragIdx = null;
-let currentView = 'viewer';
-let editingIdx = null;
-
-// ========================================
-// Google API Initialization
-// ========================================
-function gapiLoaded() {
-    gapi.load('client', initializeGapiClient);
-}
-
-async function initializeGapiClient() {
-    await gapi.client.init({
-        apiKey: API_KEY,
-        discoveryDocs: DISCOVERY_DOCS,
-    });
-    gapiInited = true;
-    maybeEnableButtons();
-}
-
-function gisLoaded() {
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: '',
-    });
-    gisInited = true;
-    maybeEnableButtons();
-}
-
-function maybeEnableButtons() {
-    if (gapiInited && gisInited) {
-        document.getElementById('loginBtn').disabled = false;
-    }
-}
-
-function handleAuth() {
-    tokenClient.callback = async (resp) => {
-        if (resp.error !== undefined) {
-            throw (resp);
-        }
-        accessToken = gapi.client.getToken().access_token;
-        await initializeApp();
-    };
-
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({prompt: 'consent'});
-    } else {
-        tokenClient.requestAccessToken({prompt: ''});
-    }
-}
-
-function handleSignout() {
-    const token = gapi.client.getToken();
-    if (token !== null) {
-        google.accounts.oauth2.revoke(token.access_token);
-        gapi.client.setToken('');
-        accessToken = null;
-        folderID = null;
-        dbFileID = null;
-        showLoginPanel();
-    }
-}
-
-function showLoginPanel() {
-    document.getElementById('panel-login').classList.remove('hidden');
-    document.getElementById('panel-list').classList.add('hidden');
-    document.getElementById('panel-edit').classList.add('hidden');
-}
-
-function showListPanel() {
-    document.getElementById('panel-login').classList.add('hidden');
-    document.getElementById('panel-list').classList.remove('hidden');
-    document.getElementById('panel-edit').classList.add('hidden');
-}
-
-// ========================================
-// Google Drive Functions
-// ========================================
-async function findOrCreateFolder() {
-    try {
-        // ค้นหาโฟลเดอร์
-        const response = await gapi.client.drive.files.list({
-            q: `name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-
-        if (response.result.files.length > 0) {
-            folderID = response.result.files[0].id;
-            console.log('✅ พบโฟลเดอร์:', folderID);
-        } else {
-            // สร้างโฟลเดอร์ใหม่
-            const fileMetadata = {
-                name: FOLDER_NAME,
-                mimeType: 'application/vnd.google-apps.folder'
-            };
-            const folder = await gapi.client.drive.files.create({
-                resource: fileMetadata,
-                fields: 'id'
-            });
-            folderID = folder.result.id;
-            console.log('✅ สร้างโฟลเดอร์ใหม่:', folderID);
-        }
-        return folderID;
-    } catch (error) {
-        console.error('Error finding/creating folder:', error);
-        throw error;
-    }
-}
-
-async function findDBFile() {
-    try {
-        const response = await gapi.client.drive.files.list({
-            q: `name='${DB_FILENAME}' and '${folderID}' in parents and trashed=false`,
-            fields: 'files(id, name)',
-            spaces: 'drive'
-        });
-
-        if (response.result.files.length > 0) {
-            dbFileID = response.result.files[0].id;
-            console.log('✅ พบไฟล์ฐานข้อมูล:', dbFileID);
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('Error finding DB file:', error);
-        return false;
-    }
-}
-
-async function loadDataFromGDrive() {
-    try {
-        const hasDB = await findDBFile();
-        if (!hasDB) {
-            console.log('ℹ️ ไม่พบไฟล์ฐานข้อมูล เริ่มต้นด้วยข้อมูลว่าง');
-            data = [];
-            return;
-        }
-
-        const response = await gapi.client.drive.files.get({
-            fileId: dbFileID,
-            alt: 'media'
-        });
-
-        data = JSON.parse(response.body);
-        console.log('✅ โหลดข้อมูล:', data.length, 'จุด');
-    } catch (error) {
-        console.error('Error loading data:', error);
-        data = [];
-    }
-}
-
-async function saveToGDrive() {
-    try {
-        showStatus('success', '⏳ กำลังบันทึกลง Google Drive...');
-        
-        const jsonData = JSON.stringify(data, null, 2);
-        const blob = new Blob([jsonData], { type: 'application/json' });
-        
-        const metadata = {
-            name: DB_FILENAME,
-            mimeType: 'application/json',
-            parents: [folderID]
-        };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', blob);
-
-        let url, method;
-        if (dbFileID) {
-            url = `https://www.googleapis.com/upload/drive/v3/files/${dbFileID}?uploadType=multipart`;
-            method = 'PATCH';
-        } else {
-            url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-            method = 'POST';
-        }
-
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Authorization': 'Bearer ' + accessToken
-            },
-            body: form
-        });
-
-        const result = await response.json();
-        if (!dbFileID) dbFileID = result.id;
-        
-        showStatus('success', '✅ บันทึกสำเร็จลง Google Drive!');
-        console.log('💾 บันทึกสำเร็จ:', data.length, 'จุด');
-    } catch (error) {
-        console.error('Error saving:', error);
-        showStatus('error', '❌ บันทึกล้มเหลว: ' + error.message);
-    }
-}
-
-async function uploadToGDrive() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    if (file.size > 50 * 1024 * 1024) {
-        showStatus('error', 'ไฟล์มีขนาดใหญ่เกิน 50MB');
-        return;
-    }
-
-    const uz = document.getElementById('uploadZone');
-    uz.classList.add('uploading');
-    uz.innerHTML = '<div>⏳ กำลังอัปโหลด...</div>';
-    showStatus('success', 'กำลังอัปโหลดไป Google Drive...');
-
-    try {
-        const metadata = {
-            name: `pano_${Date.now()}_${file.name}`,
-            mimeType: file.type,
-            parents: [folderID]
-        };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', file);
-
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webContentLink,webViewLink', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + accessToken
-            },
-            body: form
-        });
-
-        const result = await response.json();
-        
-        // ทำให้ไฟล์เป็น public
-        await gapi.client.drive.permissions.create({
-            fileId: result.id,
-            resource: {
-                role: 'reader',
-                type: 'anyone'
-            }
-        });
-
-        // สร้าง URL สำหรับแสดงรูป
-        const imageUrl = `https://drive.google.com/uc?export=view&id=${result.id}`;
-        
-        const p = data.find(x => x.id === curId);
-        p.image = imageUrl;
-        p.gdriveFileId = result.id;
-        
-        showStatus('success', '✅ อัปโหลดสำเร็จ!');
-        updateImageDisplay();
-        loadViewer();
-        
-        // บันทึกอัตโนมัติ
-        setTimeout(() => saveToGDrive(), 500);
-    } catch (error) {
-        console.error('Upload error:', error);
-        showStatus('error', '❌ อัปโหลดล้มเหลว: ' + error.message);
-    } finally {
-        uz.classList.remove('uploading');
-        uz.innerHTML = '<div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360</div><div style="font-size:11px">JPG, PNG (ไม่เกิน 50MB)</div>';
-        fileInput.value = '';
-    }
-}
-
-async function reloadFromGDrive() {
-    if (confirm('โหลดข้อมูลใหม่จาก Google Drive? (ข้อมูลที่ยังไม่บันทึกจะหายไป)')) {
-        await loadDataFromGDrive();
-        renderTree();
-        if (curId) {
-            const p = data.find(x => x.id === curId);
-            if (p) loadViewer(p.startPitch, p.startYaw);
-            else exitEdit();
-        }
-        showStatus('success', 'โหลดข้อมูลจาก Google Drive สำเร็จ!');
-    }
-}
-
-// ========================================
-// Application Initialization
-// ========================================
-async function initializeApp() {
-    await findOrCreateFolder();
-    await loadDataFromGDrive();
-    
-    map = L.map('map-full', {attributionControl: false}).setView([13.75, 100.5], 13);
+// 1. Init
+window.onload = () => {
+    map=L.map('map-full',{attributionControl:false}).setView([13.75,100.5],13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    
-    showListPanel();
-    renderTree();
+    loadFromFirebase();
+};
+
+function loadFromFirebase(){
+    db.ref('points').on('value', (snap) => {
+        data = snap.val() ? Object.values(snap.val()) : [];
+        renderTree();
+        if(curId) {
+            const p = data.find(x => x.id === curId);
+            if(p) loadViewer(p.startPitch, p.startYaw);
+        }
+    });
 }
 
-// ========================================
-// UI Functions (เหมือนเดิม)
-// ========================================
-function updateImageDisplay() {
-    const p = data.find(x => x.id === curId);
-    const box = document.getElementById('currentImage');
-    if (p && p.image) {
-        box.innerHTML = `<strong>รูปปัจจุบัน:</strong> มีรูปบน Google Drive แล้ว`;
-    } else {
-        box.innerHTML = '<em style="color:#999">ยังไม่มีรูป</em>';
+function saveToFirebase(){
+    db.ref('points').set(data).then(() => showStatus('success', '💾 บันทึกข้อมูลสำเร็จ!'));
+}
+
+// 2. Google Drive Helper
+function transformDriveUrl(url) {
+    if (url.includes('drive.google.com')) {
+        const id = url.split('/d/')[1].split('/')[0];
+        return `https://docs.google.com/uc?export=view&id=${id}`;
+    }
+    return url;
+}
+
+function updateImageFromDrive() {
+    const url = prompt("วาง Google Drive Share Link:");
+    if(url) {
+        const p = data.find(x => x.id === curId);
+        p.image = transformDriveUrl(url);
+        saveToFirebase();
+        updateImageDisplay();
     }
 }
 
-function showStatus(type, msg) {
-    const box = document.getElementById('statusBox');
-    const cls = type === 'success' ? 'status-success' : 'status-error';
-    box.innerHTML = `<div class="status-msg ${cls}">${msg}</div>`;
-    setTimeout(() => { box.innerHTML = '' }, 5000);
-}
-
-function renderTree() {
-    const root = document.getElementById('treeRoot');
-    const query = document.getElementById('searchInput').value.toLowerCase().trim();
+// 3. UI logic (ยกมาจาก Code เดิม)
+function renderTree(){
+    const root = document.getElementById('treeRoot'), query = document.getElementById('searchInput').value.toLowerCase();
     root.innerHTML = '';
-    
-    const filtered = data.filter(p => {
-        const mP = p.name.toLowerCase().includes(query);
-        const mHS = (p.hotSpots || []).some(h => (h.text || "").toLowerCase().includes(query));
-        return query === "" || mP || mHS;
-    });
+    const filtered = data.filter(p => p.name.toLowerCase().includes(query) || (p.hotSpots||[]).some(h => (h.text||"").toLowerCase().includes(query)));
     
     filtered.forEach(p => {
         const wrap = document.createElement('div');
         wrap.className = 'point-item';
-        const isExp = query !== "" || p.id === curId ? "show" : "";
         wrap.innerHTML = `
             <div class="point-header ${p.id === curId ? 'active' : ''}">
                 <span style="flex:1" onclick="selectPoint('${p.id}');toggleTree('${p.id}')">📍 ${p.name}</span>
                 <button class="btn-edit-sm" onclick="event.stopPropagation();enterEdit('${p.id}')">✏️</button>
             </div>
-            <div id="tree
+            <div id="tree-${p.id}" class="hs-tree ${p.id === curId ? 'show' : ''}"></div>`;
+        
+        const tree = wrap.querySelector(`#tree-${p.id}`);
+        (p.hotSpots || []).forEach((h, i) => {
+            const leaf = document.createElement('div');
+            leaf.style = "padding:6px 35px;font-size:12px;color:#666;cursor:pointer;";
+            leaf.innerHTML = `${h.icon || '•'} ${h.text || h.type}`;
+            leaf.onclick = () => focusHS(p.id, i);
+            tree.appendChild(leaf);
+        });
+        root.appendChild(wrap);
+    });
+    updateMarkers(filtered);
+}
+
+function loadViewer(pPitch = null, pYaw = null){
+    const p = data.find(x => x.id === curId);
+    if(!p || !p.image) {
+        document.getElementById('viewer').innerHTML = '<div style="color:#fff; padding:20px;">เลือกจุดหรือใส่รูปจาก Drive</div>';
+        return;
+    }
+    const cp = pPitch ?? (viewer ? viewer.getPitch() : (p.startPitch || 0));
+    const cy = pYaw ?? (viewer ? viewer.getYaw() : (p.startYaw || 0));
+    
+    if(viewer) viewer.destroy();
+    viewer = pannellum.viewer('viewer', {
+        type: 'equirectangular', panorama: p.image, autoLoad: true, pitch: cp, yaw: cy,
+        hotSpots: (p.hotSpots || []).map((h, i) => ({
+            pitch: h.pitch, yaw: h.yaw, type: 'info',
+            createTooltipFunc: (el) => {
+                const wrap = document.createElement('div'); wrap.className = 'hs-wrap'; wrap.style.color = h.color || '#fff';
+                if(h.icon) { const ico = document.createElement('div'); ico.style.fontSize = (h.iconSize || 24) + "px"; ico.innerText = h.icon; wrap.appendChild(ico); }
+                if(h.text) { const txt = document.createElement('div'); txt.style.fontSize = (h.fontSize || 14) + "px"; txt.innerText = h.text; wrap.appendChild(txt); }
+                el.appendChild(wrap);
+                if(masterEdit) el.onmousedown = (e) => { e.stopPropagation(); isDragging = true; dragIdx = i; el.classList.add('pnlm-drag-active'); }
+            },
+            clickHandlerFunc: () => {
+                if(masterEdit) openHS(i, h.pitch, h.yaw);
+                else if(h.type === 'scene') selectPoint(h.targetId);
+                else if(h.type === 'url') window.open(h.url, '_blank');
+            }
+        }))
+    });
+
+    viewer.on('mousedown', (e) => {
+        if(masterEdit && !isDragging && !e.target.closest('.pnlm-hotspot')){
+            const c = viewer.mouseEventToCoords(e);
+            openHS(null, c[0], c[1]);
+        }
+    });
+}
+
+// คลุม Drag Hotspot
+document.addEventListener('mouseup', (e) => {
+    if(!isDragging) return;
+    const c = viewer.mouseEventToCoords(e);
+    if(c) {
+        const p = data.find(x => x.id === curId);
+        p.hotSpots[dragIdx].pitch = c[0]; p.hotSpots[dragIdx].yaw = c[1];
+        saveToFirebase();
+    }
+    isDragging = false;
+});
+
+// ฟังก์ชันเสริมอื่นๆ
+function selectPoint(id){ curId = id; renderTree(); const p = data.find(x => x.id === id); if(p && p.lat) map.setView([p.lat, p.lon], 16); loadViewer(p.startPitch, p.startYaw); }
+function enterEdit(id){ curId = id; editMode = true; selectPoint(id); document.getElementById('panel-list').classList.add('hidden'); document.getElementById('panel-edit').classList.remove('hidden'); updateImageDisplay(); renderEditHSTree(); }
+function exitEdit(){ editMode = false; masterEdit = false; document.getElementById('panel-edit').classList.add('hidden'); document.getElementById('panel-list').classList.remove('hidden'); saveToFirebase(); }
+function addNewPoint(){ const id = 'p' + Date.now(); data.push({ id, name: "จุดใหม่", hotSpots: [], lat: map.getCenter().lat, lon: map.getCenter().lng }); saveToFirebase(); enterEdit(id); }
+function updateName(){ data.find(x => x.id === curId).name = document.getElementById('pName').value; renderTree(); }
+function saveStartView(){ const p = data.find(x => x.id === curId); p.startYaw = viewer.getYaw(); p.startPitch = viewer.getPitch(); saveToFirebase(); }
+function deletePoint(){ if(confirm('ลบจุดนี้?')){ data = data.filter(x => x.id !== curId); saveToFirebase(); exitEdit(); } }
+function toggleMasterEdit(){ masterEdit = !masterEdit; document.getElementById('masterEditBtn').innerText = masterEdit ? "⚠️ Master Edit: ON" : "🛠️ Master HotSpot Edit: OFF"; loadViewer(); renderEditHSTree(); }
+
+function openHS(idx, p, y){
+    editingIdx = idx; window.tC = { p, y };
+    document.getElementById('mTarget').innerHTML = data.map(x => `<option value="${x.id}">${x.name}</option>`).join('');
+    document.getElementById('hsModal').style.display = 'block';
+    if(idx !== null){
+        const h = data.find(x => x.id === curId).hotSpots[idx];
+        document.getElementById('mType').value = h.type;
+        document.getElementById('mText').value = h.text || "";
+        document.getElementById('mIcon').value = h.icon || "";
+        document.getElementById('mTarget').value = h.targetId || "";
+    }
+}
+
+function saveHS(){
+    const p = data.find(x => x.id === curId);
+    const hs = { 
+        pitch: window.tC.p, yaw: window.tC.y, 
+        type: document.getElementById('mType').value, 
+        text: document.getElementById('mText').value, 
+        icon: document.getElementById('mIcon').value,
+        iconSize: parseInt(document.getElementById('mIconSize').value),
+        fontSize: parseInt(document.getElementById('mFontSize').value),
+        color: document.getElementById('mColor').value,
+        targetId: document.getElementById('mTarget').value,
+        url: document.getElementById('mUrl').value
+    };
+    if(editingIdx !== null) p.hotSpots[editingIdx] = hs; else p.hotSpots.push(hs);
+    document.getElementById('hsModal').style.display = 'none';
+    saveToFirebase();
+}
+
+function updateMarkers(filtered){
+    markers.forEach(m => map.removeLayer(m));
+    markers = filtered.map(p => {
+        const isCur = p.id === curId;
+        const m = L.marker([p.lat, p.lon], { 
+            draggable: editMode && isCur,
+            icon: L.icon({ iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png', iconSize:[25,41], iconAnchor:[12,41], className: isCur ? 'marker-red' : '' })
+        }).addTo(map);
+        m.on('dragend', (e) => { const pos = e.target.getLatLng(); p.lat = pos.lat; p.lon = pos.lng; saveToFirebase(); });
+        m.on('click', () => selectPoint(p.id));
+        return m;
+    });
+}
+
+function renderEditHSTree(){
+    const c = document.getElementById('hsTreeEdit'); c.innerHTML = '';
+    const p = data.find(x => x.id === curId);
+    (p.hotSpots || []).forEach((h, i) => {
+        const d = document.createElement('div');
+        d.style = "padding:8px; background:#f9f9f9; margin-bottom:5px; border-radius:8px; display:flex; justify-content:space-between;";
+        d.innerHTML = `<span>${h.icon || '•'} ${h.text || h.type}</span>
+            <button onclick="data.find(x => x.id === curId).hotSpots.splice(${i},1); saveToFirebase();" style="color:red; border:none; background:none; cursor:pointer;">✕</button>`;
+        c.appendChild(d);
+    });
+}
+
+function switchView(){ currentView = currentView === 'viewer' ? 'map' : 'viewer'; document.getElementById('main-content').classList.toggle('map-active', currentView === 'map'); if(currentView === 'map') setTimeout(() => map.invalidateSize(), 300); }
+function showStatus(type, msg){ const b = document.getElementById('statusBox'); b.innerHTML = `<div class="status-msg status-${type}">${msg}</div>`; setTimeout(() => b.innerHTML = '', 3000); }
+function updateImageDisplay(){ const p = data.find(x => x.id === curId); document.getElementById('currentImage').innerText = p.image ? "มีรูปภาพแล้ว" : "ยังไม่มีรูป"; }
+function toggleTree(id){ document.querySelectorAll('.hs-tree').forEach(t => t.classList.remove('show')); document.getElementById(`tree-${id}`).classList.add('show'); }
+function toggleMFields(){ const t = document.getElementById('mType').value; document.getElementById('mUrlBox').style.display = t === 'url' ? 'block' : 'none'; document.getElementById('mSceneBox').style.display = t === 'scene' ? 'block' : 'none'; }
+function selI(i, el){ document.getElementById('mIcon').value = i; document.querySelectorAll('.icon-btn').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
+function selC(c, el){ document.getElementById('mColor').value = c; }
+function adjVal(id, step, disp){ let e = document.getElementById(id); e.value = parseInt(e.value)+step; document.getElementById(disp).innerText = e.value; }
+</script>
+</body>
+</html>
