@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Master SV Editor (GitHub + Firebase + Google Drive)</title>
+    <title>Master SV Editor - GitHub & Google Drive</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
@@ -25,7 +25,7 @@
         .panel { padding: 15px; overflow-y: auto; flex-grow: 1; }
         .btn { padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; }
         .btn-blue { background: var(--accent); color: white; }
-        .status-toast { position: fixed; top: 10px; right: 10px; padding: 10px 20px; color: white; border-radius: 5px; z-index: 9999; display: none; }
+        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 15px; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -38,28 +38,28 @@
         <div id="tree-list" style="margin-top: 15px;"></div>
     </div>
 
-    <div id="edit-panel" style="display:none; position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10;">
-        <div style="padding: 15px;">
-            <h3>แก้ไขจุด</h3>
-            <label>ชื่อจุด:</label>
-            <input type="text" id="pName" style="width:100%; padding:8px; margin-bottom:15px;" oninput="updateName()">
-            
-            <div style="border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer;" onclick="document.getElementById('fileInput').click()">
-                <div id="uploadText">📁 คลิกเพื่อเลือกรูป 360 จากเครื่อง</div>
-            </div>
+    <div id="edit-panel" class="edit-overlay">
+        <h3 id="edit-header">แก้ไขพิกัด</h3>
+        <label>ชื่อสถานที่:</label>
+        <input type="text" id="pName" style="width:100%; padding:8px; margin-bottom:15px;" oninput="updateName()">
+        
+        <div style="margin-top:10px;">
+            <p>รูปภาพ 360:</p>
+            <button class="btn btn-blue" onclick="document.getElementById('fileInput').click()">
+                📁 เลือกไฟล์รูปจากเครื่อง (Browse)
+            </button>
             <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
-            
-            <button class="btn" onclick="exitEdit()">⬅ กลับ</button>
-            <button class="btn" style="background:var(--red); color:white; margin-top:20px;" onclick="deletePoint()">ลบจุดนี้</button>
+            <p id="uploadStatus" style="font-size:0.8em; color:var(--accent); text-align:center; font-weight:bold;"></p>
         </div>
+
+        <button class="btn" style="background:#eee;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
+        <button class="btn" style="background:var(--red); color:white; margin-top:20px;" onclick="deletePoint()">ลบจุดนี้</button>
     </div>
 </div>
 
 <div id="viewer-container">
     <div id="viewer"></div>
 </div>
-
-<div id="status" class="status-toast"></div>
 
 <script>
 // --- CONFIGURATION ---
@@ -74,19 +74,18 @@ const firebaseConfig = {
     appId: "..."
 };
 
-// Initialize Apps
+// Initialize
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-let tokenClient;
-let data = [], map, viewer, curId = null;
+let tokenClient, map, viewer, data = [], curId = null;
 
 window.onload = () => {
     initMap();
-    loadFromFirebase();
-    gapiInit();
+    loadFirebaseData();
+    initGoogleAuth();
 };
 
-function gapiInit() {
+function initGoogleAuth() {
     gapi.load('client', async () => {
         await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
     });
@@ -102,31 +101,33 @@ function initMap() {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 }
 
-function loadFromFirebase() {
+function loadFirebaseData() {
     db.ref('points').on('value', (snap) => {
         data = snap.val() ? Object.values(snap.val()) : [];
         renderTree();
     });
 }
 
-// การจัดการ File และ Google Drive
+// --- การอัปโหลดไฟล์ไป Google Drive ---
 async function handleFileUpload(input) {
     const file = input.files[0];
     if (!file || !curId) return;
 
-    document.getElementById('uploadText').innerText = "⏳ กำลังส่งไป Google Drive...";
-    
+    const status = document.getElementById('uploadStatus');
+    status.innerText = "⏳ กำลังอัปโหลดไป Google Drive...";
+
     try {
         const driveLink = await uploadToDrive(file);
         const p = data.find(x => x.id === curId);
         p.image = driveLink;
         
         await db.ref('points').set(data);
-        document.getElementById('uploadText').innerText = "✅ อัปโหลดสำเร็จ!";
+        status.innerText = "✅ บันทึกสำเร็จ!";
         loadViewer(driveLink);
     } catch (e) {
-        alert("อัปโหลดไม่สำเร็จ: " + e.message);
-        document.getElementById('uploadText').innerText = "📁 ลองใหม่อีกครั้ง";
+        status.innerText = "❌ ผิดพลาด: " + e.message;
+    } finally {
+        input.value = ''; // ล้างค่า input
     }
 }
 
@@ -147,7 +148,7 @@ async function uploadToDrive(file) {
             });
             const driveFile = await res.json();
 
-            // Set Permission to Public
+            // ตั้งค่าแชร์ไฟล์เป็น Public (Anyone with the link)
             await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
                 method: 'POST',
                 headers: { 'Authorization': 'Bearer ' + response.access_token, 'Content-Type': 'application/json' },
@@ -160,7 +161,7 @@ async function uploadToDrive(file) {
     });
 }
 
-// Logic พื้นฐาน
+// --- UI Functions ---
 function renderTree() {
     const list = document.getElementById('tree-list');
     list.innerHTML = data.map(p => `
@@ -175,7 +176,7 @@ function enterEdit(id) {
     const p = data.find(x => x.id === id);
     document.getElementById('edit-panel').style.display = 'block';
     document.getElementById('pName').value = p.name;
-    document.getElementById('uploadText').innerText = p.image ? "🔄 เปลี่ยนรูปภาพ" : "📁 คลิกเพื่อเลือกรูป 360";
+    document.getElementById('uploadStatus').innerText = "";
     if (p.image) loadViewer(p.image);
 }
 
@@ -191,7 +192,7 @@ function loadViewer(url) {
 function addNewPoint() {
     const id = 'p' + Date.now();
     const center = map.getCenter();
-    data.push({ id, name: "จุดใหม่", lat: center.lat, lon: center.lng, image: "" });
+    data.push({ id, name: "จุดใหม่", lat: center.lat, lon: center.lng, image: "", hotSpots: [] });
     db.ref('points').set(data);
 }
 
