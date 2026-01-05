@@ -1,95 +1,17 @@
-<script src="https://apis.google.com/js/api.js"></script>
-<script src="https://accounts.google.com/gsi/client"></script>
+<div id="edit-panel" class="panel" style="display:none;">
+    <h3 id="pTitle">แก้ไขข้อมูลจุด</h3>
+    <p>ชื่อจุด:</p>
+    <input type="text" id="pName" oninput="updateName()" style="width:100%; padding:8px;">
+    
+    <div style="margin-top:20px;">
+        <p>รูปภาพ 360 (Google Drive):</p>
+        <button onclick="document.getElementById('fileInput').click()" class="btn btn-blue" style="width:100%; padding:15px;">
+            📁 เลือกไฟล์รูป 360 จากเครื่อง
+        </button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileSelect(this)">
+    </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-
-<script>
-// --- CONFIGURATION ---
-const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_API_KEY = 'YOUR_API_KEY';
-const firebaseConfig = { /* ใส่ Firebase Config ของคุณ */ };
-
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-
-let tokenClient;
-let currentPanoFile = null;
-
-// 1. Initialize Google Auth
-function gapiStart() {
-    gapi.load('client', async () => {
-        await gapi.client.init({ apiKey: GOOGLE_API_KEY, discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
-    });
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/drive.file',
-        callback: '', 
-    });
-}
-window.onload = gapiStart;
-
-// 2. ฟังก์ชันเมื่อกดปุ่มเลือกรูป (Browse Local File)
-function triggerUpload() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = e => {
-        currentPanoFile = e.target.files[0];
-        if(currentPanoFile) startUploadProcess();
-    };
-    input.click();
-}
-
-// 3. กระบวนการอัปโหลดไป Google Drive
-async function startUploadProcess() {
-    tokenClient.callback = async (response) => {
-        if (response.error) return;
-
-        showStatus('⏳ กำลังอัปโหลดไป Google Drive...', '#2196f3');
-
-        // อัปโหลดไฟล์
-        const metadata = { name: `pano_${Date.now()}.jpg`, mimeType: 'image/jpeg' };
-        const formData = new FormData();
-        formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        formData.append('file', currentPanoFile);
-
-        const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + response.access_token },
-            body: formData
-        });
-        const driveFile = await uploadRes.json();
-
-        // ตั้งค่า Permission เป็น Public (เพื่อให้ Pannellum อ่านได้)
-        await fetch(`https://www.googleapis.com/drive/v3/files/${driveFile.id}/permissions`, {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + response.access_token, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role: 'reader', type: 'anyone' })
-        });
-
-        // บันทึก Link ลง Firebase
-        const directLink = `https://docs.google.com/uc?export=view&id=${driveFile.id}`;
-        updatePointImage(directLink);
-    };
-
-    // ขอสิทธิ์ Access Token
-    if (gapi.client.getToken() === null) {
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-    } else {
-        tokenClient.requestAccessToken({ prompt: '' });
-    }
-}
-
-async function updatePointImage(link) {
-    const p = data.find(x => x.id === curId);
-    p.image = link;
-    await db.ref('points').set(data); // บันทึกข้อมูล JSON ไป Firebase
-    loadViewer(); // แสดงผลรูป 360 ทันที
-    showStatus('✅ สำเร็จ!', '#4caf50');
-}
-</script>
-
-<div class="upload-zone" onclick="triggerUpload()">
-    <div>📁 คลิกเพื่อเลือกรูป 360 และอัปโหลดไป Google Drive</div>
+    <div id="uploadStatus" style="margin-top:10px; font-weight:bold; color:var(--accent);"></div>
+    <hr>
+    <button onclick="exitEdit()" class="btn" style="width:100%;">ปิดหน้าต่างแก้ไข</button>
 </div>
