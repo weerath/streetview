@@ -1,69 +1,152 @@
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master SV Editor (Cloud Edition)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-storage-compat.js"></script>
+
+    <style>
+        /* สไตล์จากไฟล์เดิมของคุณคงไว้ทั้งหมด */
+        :root { --accent: #2196f3; --red: #ff5252; --green: #4caf50; --dark: #1a1a1a; }
+        body { margin: 0; height: 100vh; display: flex; font-family: -apple-system, sans-serif; overflow: hidden; background: #000; }
+        #sidebar { width: 340px; height: 100%; position: relative; background: #fff; z-index: 2000; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+        #viewer-container { flex-grow: 1; position: relative; background: #111; }
+        #viewer { width: 100%; height: 100%; }
+        .upload-zone { border: 2px dashed #ccc; padding: 20px; text-align: center; cursor: pointer; margin-top: 10px; border-radius: 8px; }
+        .upload-zone:hover { border-color: var(--accent); background: #f0f8ff; }
+        .loading-overlay { position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(255,255,255,0.8); display: none; align-items: center; justify-content: center; z-index: 10; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div id="map-full" style="height: 300px;"></div>
+    <div style="padding: 15px; flex-grow: 1; overflow-y: auto;">
+        <h3>รายการจุด 360</h3>
+        <button onclick="addNewPoint()" style="width:100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 5px; cursor: pointer;">+ เพิ่มจุดใหม่</button>
+        <div id="tree-list" style="margin-top: 15px;"></div>
+    </div>
+</div>
+
+<div id="viewer-container">
+    <div id="viewer"></div>
+    <div id="edit-panel" style="position: absolute; top: 10px; right: 10px; background: white; padding: 15px; border-radius: 8px; width: 280px; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <h4 id="edit-title">แก้ไขจุด</h4>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+            <div id="uploadStatusText">📁 คลิกเพื่อเลือกรูป 360 จากเครื่อง</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleUpload(this)">
+        <button onclick="exitEdit()" style="margin-top:10px; width:100%;">ปิด</button>
+    </div>
+</div>
 
 <script>
-// 2. ตั้งค่า Firebase Config (ใช้ค่าเดิมของคุณ)
+// --- CONFIG: ใส่ค่าจาก Firebase ของคุณที่นี่ ---
 const firebaseConfig = {
-    apiKey: "...",
-    authDomain: "...",
-    databaseURL: "...",
-    projectId: "...",
-    storageBucket: "...", // ต้องมีตัวนี้เพื่ออัปโหลดไฟล์
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "...",
     appId: "..."
 };
+// ------------------------------------------
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const storage = firebase.storage(); // ประกาศใช้งาน Storage
+const storage = firebase.storage();
 
-// 3. ฟังก์ชันอัปโหลดรูป (เลือกจากเครื่อง -> ขึ้น Storage -> เก็บ Link)
-async function uploadPanorama() {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file) return;
+let data = [], map, viewer, curId = null;
 
-    // แสดงสถานะการทำงาน
-    const uz = document.getElementById('uploadZone');
-    uz.classList.add('uploading');
-    uz.innerHTML = '<div>⏳ กำลังอัปโหลดขึ้น Cloud...</div>';
+// โหลดข้อมูลจาก Firebase ครั้งแรก
+window.onload = () => {
+    map = L.map('map-full').setView([13.75, 100.5], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    
+    db.ref('points').on('value', (snapshot) => {
+        data = snapshot.val() ? Object.values(snapshot.val()) : [];
+        renderTree();
+    });
+};
+
+// ฟังก์ชันอัปโหลด (หัวใจสำคัญ)
+async function handleUpload(input) {
+    const file = input.files[0];
+    if (!file || !curId) return;
+
+    const statusText = document.getElementById('uploadStatusText');
+    statusText.innerText = "⏳ กำลังอัปโหลด...";
     
     try {
-        // สร้างที่เก็บไฟล์ใน Storage (โฟลเดอร์ panoramas/ชื่อไฟล์)
-        const storageRef = storage.ref('panoramas/' + Date.now() + '-' + file.name);
-        
-        // เริ่มอัปโหลด
+        // 1. อัปโหลดไฟล์ไปที่ Firebase Storage (ทำงานเหมือน Google Drive)
+        const storageRef = storage.ref(`panoramas/${curId}/${file.name}`);
         const snapshot = await storageRef.put(file);
         
-        // รับ Download URL กลับมา
+        // 2. รับ Link ของรูปที่อัปโหลดเสร็จแล้ว
         const downloadURL = await snapshot.ref.getDownloadURL();
         
-        // นำ URL ที่ได้ไปบันทึกลงใน Data ของจุดปัจจุบัน
-        const p = data.find(x => x.id === curId);
-        p.image = downloadURL;
+        // 3. บันทึก Link ลงใน Database
+        const idx = data.findIndex(x => x.id === curId);
+        data[idx].image = downloadURL;
         
-        // บันทึก Database ทันที
-        saveToJSON(); 
+        await db.ref('points').set(data);
         
-        // อัปเดตหน้าจอ
-        updateImageDisplay();
-        loadViewer();
-        showStatus('success', '✅ อัปโหลดและบันทึกสำเร็จ!');
-        
+        statusText.innerText = "✅ อัปโหลดสำเร็จ!";
+        loadViewer(downloadURL);
     } catch (e) {
-        console.error(e);
-        showStatus('error', '❌ อัปโหลดล้มเหลว: ' + e.message);
-    } finally {
-        uz.classList.remove('uploading');
-        uz.innerHTML = '<div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360</div>';
-        fileInput.value = '';
+        alert("อัปโหลดล้มเหลว: " + e.message);
+        statusText.innerText = "❌ ลองใหม่อีกครั้ง";
     }
 }
 
-// 4. ส่วนของ HTML (ส่วนของปุ่มเลือกไฟล์)
-/*
-   <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-       <div>📁 คลิกเพื่อเลือกไฟล์รูปภาพ 360 จากเครื่อง</div>
-   </div>
-   <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="uploadPanorama()">
-*/
+function renderTree() {
+    const list = document.getElementById('tree-list');
+    list.innerHTML = data.map(p => `
+        <div onclick="enterEdit('${p.id}')" style="padding:10px; border-bottom:1px solid #eee; cursor:pointer;">
+            📍 ${p.name || 'ไม่มีชื่อ'}
+        </div>
+    `).join('');
+}
+
+function enterEdit(id) {
+    curId = id;
+    const p = data.find(x => x.id === id);
+    document.getElementById('edit-panel').style.display = 'block';
+    document.getElementById('edit-title').innerText = p.name;
+    document.getElementById('uploadStatusText').innerText = p.image ? "🔄 เปลี่ยนรูป 360" : "📁 คลิกเพื่อเลือกรูป 360 จากเครื่อง";
+    if (p.image) loadViewer(p.image);
+}
+
+function loadViewer(url) {
+    if (viewer) viewer.destroy();
+    viewer = pannellum.viewer('viewer', {
+        type: "equirectangular",
+        panorama: url,
+        autoLoad: true
+    });
+}
+
+function addNewPoint() {
+    const id = 'p' + Date.now();
+    const center = map.getCenter();
+    data.push({ id, name: "จุดใหม่", lat: center.lat, lon: center.lng, image: "" });
+    db.ref('points').set(data);
+}
+
+function exitEdit() {
+    document.getElementById('edit-panel').style.display = 'none';
+    curId = null;
+}
 </script>
+</body>
+</html>
