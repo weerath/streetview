@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>360 VR Editor Pro - Firebase Storage</title>
+    <title>360 VR Editor Pro - Direct Upload</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
@@ -17,7 +17,7 @@
         body { margin: 0; height: 100vh; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #000; }
         
         /* Sidebar */
-        #sidebar { width: 350px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
+        #sidebar { width: 380px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
         #map-container { height: 250px; width: 100%; border-bottom: 1px solid #dee2e6; }
         .panel { padding: 20px; overflow-y: auto; flex-grow: 1; }
         
@@ -26,9 +26,11 @@
         #viewer { width: 100%; height: 100%; }
         
         /* UI Elements */
-        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; transition: 0.2s; }
+        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; transition: 0.2s; font-size: 0.95em; }
         .btn-primary { background: var(--accent); color: white; }
         .btn-primary:hover { background: #0056b3; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
         .list-item { padding: 12px; border-bottom: 1px solid #f1f1f1; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
         .list-item:hover { background: #f8f9fa; border-left: 4px solid var(--accent); }
         
@@ -36,14 +38,39 @@
         .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 20px; box-sizing: border-box; overflow-y: auto; }
         .status-text { font-size: 0.85em; color: var(--accent); text-align: center; margin-top: 8px; font-weight: bold; }
         
+        /* Image Source Options */
+        .source-selector { display: flex; gap: 10px; margin-bottom: 20px; }
+        .source-btn { flex: 1; padding: 15px; border: 2px solid #ddd; background: white; border-radius: 8px; cursor: pointer; transition: 0.2s; text-align: center; }
+        .source-btn:hover { border-color: var(--accent); background: #f8f9fa; }
+        .source-btn.active { border-color: var(--accent); background: #e9f5ff; color: var(--accent); font-weight: 600; }
+        
         /* Upload Zone */
-        .upload-zone { border: 2px dashed #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa; transition: 0.2s; }
+        .upload-zone { border: 2px dashed #ddd; padding: 25px; border-radius: 8px; text-align: center; background: #f8f9fa; transition: 0.2s; margin-top: 15px; }
         .upload-zone:hover { border-color: var(--accent); background: #e9f5ff; }
-        .preview-img { max-width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
+        .preview-img { max-width: 100%; height: 180px; object-fit: cover; border-radius: 8px; margin-top: 15px; border: 1px solid #ddd; }
+        
+        /* Input Styles */
+        input[type="text"], input[type="url"] { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #ccc; 
+            border-radius: 6px; 
+            box-sizing: border-box; 
+            font-size: 0.95em;
+            transition: 0.2s;
+        }
+        input[type="text"]:focus, input[type="url"]:focus { 
+            outline: none; 
+            border-color: var(--accent); 
+            box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+        }
         
         /* Progress Bar */
-        .progress-bar { width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin-top: 10px; display: none; }
+        .progress-bar { width: 100%; height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin-top: 12px; display: none; }
         .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+        
+        /* Section Headers */
+        .section-header { font-weight: 600; margin: 20px 0 10px 0; color: #495057; font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px; }
     </style>
 </head>
 <body>
@@ -59,24 +86,48 @@
     <div id="edit-panel" class="edit-overlay">
         <h3>✏️ แก้ไขข้อมูลจุด 360</h3>
         
-        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ชื่อสถานที่:</label>
-        <input type="text" id="pName" placeholder="ระบุชื่อสถานที่..." style="width:100%; padding:10px; margin-bottom: 20px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;" oninput="updateName()">
+        <div class="section-header">ชื่อสถานที่</div>
+        <input type="text" id="pName" placeholder="ระบุชื่อสถานที่..." oninput="updateName()">
         
-        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ภาพ 360 องศา:</label>
-        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 48px;">🌐</div>
-            <p style="margin: 10px 0 5px 0; font-weight: 600;">คลิกเพื่ออัปโหลดภาพ Equirectangular</p>
-            <p style="margin: 0; font-size: 0.85em; color: #6c757d;">รองรับ JPG, PNG (แนะนำอัตราส่วน 2:1)</p>
-            <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
-            
-            <div class="progress-bar" id="progressBar">
-                <div class="progress-fill" id="progressFill"></div>
+        <div class="section-header" style="margin-top: 25px;">แหล่งที่มาของภาพ 360°</div>
+        <div class="source-selector">
+            <div class="source-btn active" id="uploadBtn" onclick="selectSource('upload')">
+                📤 อัปโหลดรูปภาพ
             </div>
-            <div id="uploadStatus" class="status-text"></div>
-            <img id="previewImg" class="preview-img" style="display:none;">
+            <div class="source-btn" id="linkBtn" onclick="selectSource('link')">
+                🔗 Google Drive Link
+            </div>
         </div>
 
-        <button class="btn" style="background:#f1f1f1; margin-top:30px;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
+        <!-- Upload Section -->
+        <div id="uploadSection">
+            <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 56px;">🌐</div>
+                <p style="margin: 15px 0 5px 0; font-weight: 600; font-size: 1.05em;">คลิกเพื่ออัปโหลดภาพ 360°</p>
+                <p style="margin: 0; font-size: 0.85em; color: #6c757d;">รองรับ JPG, PNG (แนะนำอัตราส่วน 2:1)</p>
+                <p style="margin: 5px 0 0 0; font-size: 0.75em; color: #999;">ขนาดไฟล์สูงสุด: 10MB</p>
+                <input type="file" id="fileInput" accept="image/jpeg,image/jpg,image/png" style="display:none;" onchange="handleFileUpload(this)">
+                
+                <div class="progress-bar" id="progressBar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div id="uploadStatus" class="status-text"></div>
+            </div>
+            <img id="previewImgUpload" class="preview-img" style="display:none;">
+        </div>
+
+        <!-- Google Drive Link Section -->
+        <div id="linkSection" style="display:none;">
+            <p style="margin: 15px 0 10px 0; font-size: 0.9em; color: #6c757d;">
+                📌 วิธีการ: เปิดไฟล์ใน Google Drive → คลิกขวา → Share → Anyone with the link → Copy link
+            </p>
+            <input type="url" id="driveLink" placeholder="https://drive.google.com/file/d/..." oninput="updateDriveLink()">
+            <button class="btn btn-secondary" onclick="loadDrivePreview()" style="margin-top: 10px;">🔍 แสดงตัวอย่าง</button>
+            <img id="previewImgDrive" class="preview-img" style="display:none;">
+            <div id="linkStatus" class="status-text"></div>
+        </div>
+
+        <button class="btn" style="background:#f1f1f1; margin-top:35px;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
         <button class="btn" style="background:var(--red); color:white;" onclick="deletePoint()">🗑️ ลบจุดนี้</button>
     </div>
 </div>
@@ -99,7 +150,7 @@ const firebaseConfig = {
 // Global Variables
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-let map, viewer, dataList = [], curId = null;
+let map, viewer, dataList = [], curId = null, currentSource = 'upload';
 
 window.onload = () => {
     initMap();
@@ -112,7 +163,6 @@ function initMap() {
         maxZoom: 19
     }).addTo(map);
     
-    // Add click handler to add points on map
     map.on('click', (e) => {
         if (curId) {
             db.ref(`points/${curId}`).update({ 
@@ -145,12 +195,30 @@ function updateMapMarkers() {
     });
 }
 
+// --- Source Selection ---
+function selectSource(source) {
+    currentSource = source;
+    
+    document.getElementById('uploadBtn').classList.remove('active');
+    document.getElementById('linkBtn').classList.remove('active');
+    
+    if (source === 'upload') {
+        document.getElementById('uploadBtn').classList.add('active');
+        document.getElementById('uploadSection').style.display = 'block';
+        document.getElementById('linkSection').style.display = 'none';
+    } else {
+        document.getElementById('linkBtn').classList.add('active');
+        document.getElementById('uploadSection').style.display = 'none';
+        document.getElementById('linkSection').style.display = 'block';
+    }
+}
+
 // --- 360 Viewer Management ---
 function update360Viewer(imageData) {
     if (viewer) viewer.destroy();
     
     if (!imageData) {
-        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">📷 ยังไม่มีภาพ 360 องศา<br><span style="font-size: 0.8em; color: #888;">อัปโหลดภาพในแผงด้านซ้าย</span></div>';
+        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">📷 ยังไม่มีภาพ 360 องศา<br><span style="font-size: 0.8em; color: #888;">อัปโหลดภาพหรือใส่ลิงก์ Google Drive</span></div>';
         return;
     }
     
@@ -166,22 +234,28 @@ function update360Viewer(imageData) {
     });
 }
 
-// --- Upload Handler with Base64 & Compression ---
+// --- Upload Handler with Base64 ---
 async function handleFileUpload(input) {
     const file = input.files[0];
     if (!file || !curId) return;
 
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('⚠️ ไฟล์ใหญ่เกินไป! กรุณาเลือกไฟล์ที่มีขนาดไม่เกิน 10MB');
+        input.value = '';
+        return;
+    }
+
     const status = document.getElementById('uploadStatus');
     const progress = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
-    const preview = document.getElementById('previewImg');
+    const preview = document.getElementById('previewImgUpload');
     
     status.innerText = "⏳ กำลังประมวลผลภาพ...";
     progress.style.display = 'block';
     progressFill.style.width = '30%';
 
     try {
-        // Read and compress image
         const base64Data = await compressAndConvertToBase64(file, (percent) => {
             progressFill.style.width = percent + '%';
         });
@@ -189,11 +263,15 @@ async function handleFileUpload(input) {
         progressFill.style.width = '80%';
         status.innerText = "💾 กำลังบันทึกลง Firebase...";
         
-        // Save to Firebase
-        await db.ref(`points/${curId}`).update({ image: base64Data });
+        // Generate a shareable URL format (store as base64)
+        await db.ref(`points/${curId}`).update({ 
+            image: base64Data,
+            imageSource: 'upload',
+            uploadedAt: new Date().toISOString()
+        });
         
         progressFill.style.width = '100%';
-        status.innerText = "✅ อัปโหลดสำเร็จ!";
+        status.innerText = "✅ อัปโหลดและบันทึกสำเร็จ!";
         
         // Update viewer and preview
         update360Viewer(base64Data);
@@ -208,6 +286,7 @@ async function handleFileUpload(input) {
     } catch (e) {
         status.innerText = "❌ ผิดพลาด: " + e.message;
         progress.style.display = 'none';
+        console.error(e);
     } finally {
         input.value = '';
     }
@@ -227,7 +306,6 @@ function compressAndConvertToBase64(file, progressCallback) {
         reader.onload = (e) => {
             const img = new Image();
             img.onload = () => {
-                // Calculate new dimensions (max 4096px for performance)
                 let width = img.width;
                 let height = img.height;
                 const maxSize = 4096;
@@ -244,7 +322,6 @@ function compressAndConvertToBase64(file, progressCallback) {
                 
                 progressCallback(60);
                 
-                // Create canvas and compress
                 const canvas = document.createElement('canvas');
                 canvas.width = width;
                 canvas.height = height;
@@ -253,7 +330,6 @@ function compressAndConvertToBase64(file, progressCallback) {
                 
                 progressCallback(70);
                 
-                // Convert to base64 (JPEG with 0.85 quality)
                 const base64 = canvas.toDataURL('image/jpeg', 0.85);
                 resolve(base64);
             };
@@ -266,6 +342,64 @@ function compressAndConvertToBase64(file, progressCallback) {
     });
 }
 
+// --- Google Drive Link Handler ---
+let driveLinkTimer;
+function updateDriveLink() {
+    clearTimeout(driveLinkTimer);
+    driveLinkTimer = setTimeout(async () => {
+        const link = document.getElementById('driveLink').value.trim();
+        if (!link || !curId) return;
+        
+        const convertedLink = convertDriveLink(link);
+        await db.ref(`points/${curId}`).update({ 
+            image: convertedLink,
+            imageSource: 'drive',
+            updatedAt: new Date().toISOString()
+        });
+        
+        document.getElementById('linkStatus').innerText = "✅ บันทึกลิงก์แล้ว";
+        setTimeout(() => {
+            document.getElementById('linkStatus').innerText = "";
+        }, 2000);
+    }, 1000);
+}
+
+function convertDriveLink(link) {
+    // Convert Google Drive share link to direct link
+    const match = link.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (match) {
+        return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+    }
+    return link;
+}
+
+function loadDrivePreview() {
+    const link = document.getElementById('driveLink').value.trim();
+    if (!link) {
+        alert('⚠️ กรุณาใส่ลิงก์ Google Drive ก่อน');
+        return;
+    }
+    
+    const convertedLink = convertDriveLink(link);
+    const preview = document.getElementById('previewImgDrive');
+    const status = document.getElementById('linkStatus');
+    
+    status.innerText = "⏳ กำลังโหลดตัวอย่าง...";
+    
+    preview.onload = () => {
+        preview.style.display = 'block';
+        status.innerText = "✅ โหลดสำเร็จ";
+        update360Viewer(convertedLink);
+    };
+    
+    preview.onerror = () => {
+        status.innerText = "❌ ไม่สามารถโหลดภาพได้ (ตรวจสอบสิทธิ์การแชร์)";
+        preview.style.display = 'none';
+    };
+    
+    preview.src = convertedLink;
+}
+
 // --- UI Logic ---
 function renderTree() {
     const list = document.getElementById('tree-list');
@@ -274,12 +408,16 @@ function renderTree() {
         return;
     }
     
-    list.innerHTML = dataList.map(p => `
-        <div class="list-item" onclick="enterEdit('${p.id}')">
-            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
-            <span>${p.image ? '🌐' : '⚪'}</span>
-        </div>
-    `).join('');
+    list.innerHTML = dataList.map(p => {
+        const icon = p.image ? '🌐' : '⚪';
+        const source = p.imageSource === 'drive' ? '📁' : (p.imageSource === 'upload' ? '📤' : '');
+        return `
+            <div class="list-item" onclick="enterEdit('${p.id}')">
+                <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
+                <span>${icon} ${source}</span>
+            </div>
+        `;
+    }).join('');
 }
 
 function enterEdit(id) {
@@ -289,15 +427,26 @@ function enterEdit(id) {
     document.getElementById('edit-panel').style.display = 'block';
     document.getElementById('pName').value = p.name || '';
     document.getElementById('uploadStatus').innerText = "";
+    document.getElementById('linkStatus').innerText = "";
     document.getElementById('progressBar').style.display = 'none';
     document.getElementById('progressFill').style.width = '0%';
     
-    const preview = document.getElementById('previewImg');
-    if (p.image) {
-        preview.src = p.image;
-        preview.style.display = 'block';
+    // Set source based on saved data
+    if (p.imageSource === 'drive') {
+        selectSource('link');
+        document.getElementById('driveLink').value = p.image || '';
+        const preview = document.getElementById('previewImgDrive');
+        if (p.image) {
+            preview.src = p.image;
+            preview.style.display = 'block';
+        }
     } else {
-        preview.style.display = 'none';
+        selectSource('upload');
+        const preview = document.getElementById('previewImgUpload');
+        if (p.image) {
+            preview.src = p.image;
+            preview.style.display = 'block';
+        }
     }
     
     update360Viewer(p.image);
@@ -310,10 +459,10 @@ function addNewPoint() {
         name: "จุดใหม่ " + (dataList.length + 1),
         lat: center.lat,
         lon: center.lng,
-        image: ""
+        image: "",
+        imageSource: "upload"
     });
     
-    // Auto-open edit panel for new point
     setTimeout(() => enterEdit(newRef.key), 300);
 }
 
@@ -335,6 +484,9 @@ function deletePoint() {
 
 function exitEdit() {
     document.getElementById('edit-panel').style.display = 'none';
+    document.getElementById('previewImgUpload').style.display = 'none';
+    document.getElementById('previewImgDrive').style.display = 'none';
+    document.getElementById('driveLink').value = '';
     curId = null;
     if (viewer) viewer.destroy();
     document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">👈 เลือกจุด 360 จากด้านซ้าย</div>';
