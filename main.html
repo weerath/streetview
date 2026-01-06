@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>Google Drive API Test</title>
+<title>Drive Folder Test</title>
 
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
@@ -10,19 +10,24 @@
 <style>
 body{font-family:sans-serif;padding:20px}
 button{margin-right:10px}
+pre{background:#f5f5f5;padding:10px}
 </style>
 </head>
 <body>
 
-<h3>Google Drive Test</h3>
+<h3>Google Drive Folder Test</h3>
 <button onclick="login()">Login Google</button>
-<button onclick="createTestFile()">Create Test File</button>
-<p id="status"></p>
+<button onclick="createFile()">Create test.txt</button>
+
+<pre id="log"></pre>
 
 <script>
 /* ===== CONFIG ===== */
-const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleusercontent.com";
+const CLIENT_ID =
+"740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleusercontent.com";
+
 const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
+
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
 let tokenClient;
@@ -30,10 +35,11 @@ let tokenClient;
 /* ===== INIT ===== */
 gapi.load("client", async () => {
   await gapi.client.init({
-    discoveryDocs: [
+    discoveryDocs:[
       "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
     ]
   });
+  log("GAPI ready");
 });
 
 tokenClient = google.accounts.oauth2.initTokenClient({
@@ -41,7 +47,7 @@ tokenClient = google.accounts.oauth2.initTokenClient({
   scope: SCOPES,
   callback: token => {
     gapi.client.setToken(token);
-    status("Login สำเร็จ");
+    log("Login success");
   }
 });
 
@@ -50,7 +56,9 @@ function login(){
 }
 
 /* ===== TEST CREATE FILE ===== */
-async function createTestFile(){
+async function createFile(){
+  const body = "OAuth User Drive Test OK";
+
   await gapi.client.drive.files.create({
     resource:{
       name:"test.txt",
@@ -58,14 +66,15 @@ async function createTestFile(){
     },
     media:{
       mimeType:"text/plain",
-      body:"Google Drive API Test OK"
+      body
     }
   });
-  status("สร้างไฟล์ test.txt ใน Drive แล้ว");
+
+  log("สร้าง test.txt ใน Folder สำเร็จ");
 }
 
-function status(t){
-  document.getElementById("status").innerText = t;
+function log(t){
+  document.getElementById("log").textContent = t;
 }
 </script>
 </body>
