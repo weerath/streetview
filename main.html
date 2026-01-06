@@ -2,41 +2,44 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>SV Editor – Drive Test</title>
+<title>Drive Only App</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
+<!-- Google -->
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+<!-- 360 Viewer -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
 
 <style>
-body{margin:0;font-family:sans-serif;background:#111;color:#fff}
-#bar{padding:10px;background:#000}
+body{margin:0;background:#111;color:#fff;font-family:sans-serif}
+#top{padding:8px;background:#000}
+#viewer{width:100%;height:calc(100vh - 45px)}
 button{margin-right:5px}
-#viewer{width:100%;height:calc(100vh - 50px)}
 </style>
 </head>
 <body>
 
-<div id="bar">
+<div id="top">
 <button onclick="login()">Login Google</button>
 <button onclick="loadDB()">Load</button>
 <button onclick="saveDB()">Save</button>
 <input type="file" accept="image/*" onchange="uploadImage(this.files[0])">
-<span id="msg"></span>
+<span id="status"></span>
 </div>
 
 <div id="viewer"></div>
 
 <script>
 /* ===== CONFIG ===== */
-const CLIENT_ID = "YOUR_CLIENT_ID";
-const FOLDER_ID = "YOUR_FOLDER_ID";
+const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleusercontent.com";
+const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
 let tokenClient, accessToken;
-let data = [];
+let db = [];
 let viewer;
 
 /* ===== GOOGLE INIT ===== */
@@ -49,10 +52,10 @@ gapi.load("client", async()=>{
 tokenClient = google.accounts.oauth2.initTokenClient({
   client_id: CLIENT_ID,
   scope: SCOPES,
-  callback: t=>{
+  callback:t=>{
     accessToken=t.access_token;
     gapi.client.setToken(t);
-    msg("Login OK");
+    log("Login OK");
   }
 });
 
@@ -68,17 +71,18 @@ async function findFile(name){
 
 async function loadDB(){
   const f = await findFile("data.json");
-  if(!f){ data=[]; msg("Empty DB"); return; }
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+  if(!f){ db=[]; log("DB empty"); return; }
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
     {headers:{Authorization:`Bearer ${accessToken}`}}
   );
-  data = await r.json();
-  if(data[0]?.image) loadViewer(data[0].image);
-  msg("Loaded "+data.length);
+  db = await r.json();
+  if(db[0]?.image) show360(db[0].image);
+  log("Loaded "+db.length);
 }
 
 async function saveDB(){
-  const body = JSON.stringify(data,null,2);
+  const body = JSON.stringify(db,null,2);
   let f = await findFile("data.json");
 
   if(!f){
@@ -94,7 +98,7 @@ async function saveDB(){
       body
     });
   }
-  msg("Saved");
+  log("Saved");
 }
 
 async function uploadImage(file){
@@ -108,18 +112,24 @@ async function uploadImage(file){
     {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:fd}
   );
   const j = await r.json();
-  const url=`https://drive.google.com/uc?id=${j.id}`;
-  data.push({id:Date.now(),name:file.name,image:url});
-  loadViewer(url);
-  msg("Uploaded");
+  const url = `https://drive.google.com/uc?id=${j.id}`;
+
+  db.push({id:Date.now(),image:url,hotspots:[]});
+  show360(url);
+  log("Image uploaded");
 }
 
-/* ===== VIEW ===== */
-function loadViewer(url){
+/* ===== VIEWER ===== */
+function show360(url){
   if(viewer) viewer.destroy();
-  viewer = pannellum.viewer("viewer",{type:"equirectangular",panorama:url,autoLoad:true});
+  viewer = pannellum.viewer("viewer",{
+    type:"equirectangular",
+    panorama:url,
+    autoLoad:true
+  });
 }
-function msg(t){document.getElementById("msg").innerText=t;}
+
+function log(t){status.innerText=t;}
 </script>
 </body>
 </html>
