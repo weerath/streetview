@@ -2,98 +2,84 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>XXXXX</title>
+<title>SV Editor – Drive Test</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- LIB -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-
-<!-- GOOGLE -->
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
 
 <style>
-body{margin:0;font-family:sans-serif;background:#000}
-#top{padding:10px;background:#111;color:#fff}
-#viewer,#map{width:100%;height:calc(100vh - 50px)}
-button{padding:8px;margin:5px}
+body{margin:0;font-family:sans-serif;background:#111;color:#fff}
+#bar{padding:10px;background:#000}
+button{margin-right:5px}
+#viewer{width:100%;height:calc(100vh - 50px)}
 </style>
 </head>
-
 <body>
-<div id="top">
-<button onclick="login()">🔐 Login Google</button>
-<button onclick="loadDB()">📥 Load</button>
-<button onclick="saveDB()">💾 Save</button>
-<input type="file" id="file" accept="image/*" onchange="uploadImage()">
-<span id="status"></span>
+
+<div id="bar">
+<button onclick="login()">Login Google</button>
+<button onclick="loadDB()">Load</button>
+<button onclick="saveDB()">Save</button>
+<input type="file" accept="image/*" onchange="uploadImage(this.files[0])">
+<span id="msg"></span>
 </div>
 
 <div id="viewer"></div>
 
 <script>
 /* ===== CONFIG ===== */
-const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleusercontent.com";
-const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
+const CLIENT_ID = "YOUR_CLIENT_ID";
+const FOLDER_ID = "YOUR_FOLDER_ID";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-let tokenClient;
-let accessToken = null;
+let tokenClient, accessToken;
 let data = [];
 let viewer;
 
-/* ===== INIT GOOGLE ===== */
-function initGoogle(){
-  gapi.load("client", async ()=>{
-    await gapi.client.init({
-      discoveryDocs:["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
-    });
+/* ===== GOOGLE INIT ===== */
+gapi.load("client", async()=>{
+  await gapi.client.init({
+    discoveryDocs:["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
   });
+});
 
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: (t)=>{
-      accessToken = t.access_token;
-      gapi.client.setToken(t);
-      log("Login OK");
-    }
-  });
-}
-initGoogle();
+tokenClient = google.accounts.oauth2.initTokenClient({
+  client_id: CLIENT_ID,
+  scope: SCOPES,
+  callback: t=>{
+    accessToken=t.access_token;
+    gapi.client.setToken(t);
+    msg("Login OK");
+  }
+});
 
-/* ===== AUTH ===== */
-function login(){
-  tokenClient.requestAccessToken();
-}
+function login(){ tokenClient.requestAccessToken(); }
 
-/* ===== DRIVE UTILS ===== */
+/* ===== DRIVE ===== */
 async function findFile(name){
   const r = await gapi.client.drive.files.list({
-    q: `'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
+    q:`'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
   });
   return r.result.files[0];
 }
 
 async function loadDB(){
   const f = await findFile("data.json");
-  if(!f){ data=[]; log("DB empty"); return; }
-
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
-    { headers:{Authorization:`Bearer ${accessToken}`} }
+  if(!f){ data=[]; msg("Empty DB"); return; }
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+    {headers:{Authorization:`Bearer ${accessToken}`}}
   );
-  data = await res.json();
-  log("Loaded "+data.length+" points");
+  data = await r.json();
   if(data[0]?.image) loadViewer(data[0].image);
+  msg("Loaded "+data.length);
 }
 
 async function saveDB(){
-  let f = await findFile("data.json");
   const body = JSON.stringify(data,null,2);
+  let f = await findFile("data.json");
 
   if(!f){
     await gapi.client.drive.files.create({
@@ -108,42 +94,32 @@ async function saveDB(){
       body
     });
   }
-  log("Saved DB");
+  msg("Saved");
 }
 
-async function uploadImage(){
-  const file = document.getElementById("file").files[0];
-  if(!file) return;
-
-  const meta = {name:file.name,parents:[FOLDER_ID]};
-  const form = new FormData();
-  form.append("metadata", new Blob([JSON.stringify(meta)],{type:"application/json"}));
-  form.append("file", file);
+async function uploadImage(file){
+  const meta={name:file.name,parents:[FOLDER_ID]};
+  const fd=new FormData();
+  fd.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
+  fd.append("file",file);
 
   const r = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-    {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:form}
+    {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:fd}
   );
   const j = await r.json();
-  const imgUrl = `https://drive.google.com/uc?id=${j.id}`;
-
-  data.push({id:"p"+Date.now(),name:file.name,image:imgUrl,hotSpots:[]});
-  loadViewer(imgUrl);
-  log("Image uploaded");
+  const url=`https://drive.google.com/uc?id=${j.id}`;
+  data.push({id:Date.now(),name:file.name,image:url});
+  loadViewer(url);
+  msg("Uploaded");
 }
 
-/* ===== VIEWER ===== */
+/* ===== VIEW ===== */
 function loadViewer(url){
   if(viewer) viewer.destroy();
-  viewer = pannellum.viewer("viewer",{
-    type:"equirectangular",
-    panorama:url,
-    autoLoad:true
-  });
+  viewer = pannellum.viewer("viewer",{type:"equirectangular",panorama:url,autoLoad:true});
 }
-
-/* ===== UI ===== */
-function log(t){document.getElementById("status").innerText=t;}
+function msg(t){document.getElementById("msg").innerText=t;}
 </script>
 </body>
 </html>
