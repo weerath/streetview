@@ -1,187 +1,47 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>360 Editor - Local Sandbox</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    <style>
-        :root { --accent: #2196f3; --red: #ff5252; --dark: #1a1a1a; }
-        body { margin: 0; height: 100vh; display: flex; font-family: -apple-system, sans-serif; overflow: hidden; background: #000; }
-        #sidebar { width: 340px; height: 100%; background: #fff; z-index: 2000; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
-        #map { height: 200px; width: 100%; border-bottom: 1px solid #ddd; }
-        .panel-content { padding: 15px; overflow-y: auto; flex-grow: 1; }
-        #viewer-container { flex-grow: 1; position: relative; background: #000; }
-        #viewer { width: 100%; height: 100%; }
-        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:#fff; z-index:100; display:none; padding:15px; box-sizing:border-box; overflow-y:auto; }
-        .btn { padding: 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; width: 100%; margin-bottom: 10px; }
-        .btn-blue { background: var(--accent); color: white; }
-        .list-item { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; }
-        .list-item:hover { background: #f5f5f5; }
-        .badge { background: #eee; padding: 2px 6px; border-radius: 10px; font-size: 11px; }
-        input, select { width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-    </style>
+<meta charset="utf-8">
+<title>360 Upload to Google Drive</title>
+<script src="https://accounts.google.com/gsi/client"></script>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+
+<style>
+body{margin:0;font-family:sans-serif}
+#viewer{width:100%;height:80vh}
+button{padding:10px;margin:5px}
+</style>
 </head>
 <body>
 
-<div id="sidebar">
-    <div id="map"></div>
-    <div class="panel-content">
-        <h3 style="margin-top:0">📍 รายการจุด 360</h3>
-        <button class="btn btn-blue" onclick="addNewPoint()">+ เพิ่มจุดใหม่</button>
-        <div id="tree-list"></div>
-    </div>
-
-    <div id="edit-panel" class="edit-overlay">
-        <h3 id="edit-title">แก้ไขจุด</h3>
-        <label>ชื่อสถานที่:</label>
-        <input type="text" id="pName" oninput="updateName()">
-        
-        <label>ภาพ 360 (จำลองอัปโหลด):</label>
-        <input type="file" accept="image/*" onchange="previewImage(this)">
-        
-        <div style="background: #f9f9f9; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
-            <small>พิกัด: <span id="pCoords">-</span></small>
-        </div>
-
-        <button class="btn btn-blue" onclick="exitEdit()">⬅️ กลับหน้าหลัก</button>
-        <button class="btn" style="background:#f1f1f1" onclick="alert('ฟังก์ชัน Hotspot จะเปิดใช้งานเมื่อบันทึกข้อมูลสำเร็จ')">➕ เพิ่ม Hotspot (Coming Soon)</button>
-        <button class="btn" style="background:var(--red); color:white" onclick="deletePoint()">🗑️ ลบจุดนี้</button>
-    </div>
-</div>
-
-<div id="viewer-container">
-    <div id="viewer"></div>
-</div>
+<button onclick="login()">🔐 Login Google</button>
+<input type="file" accept="image/*" onchange="upload(this.files[0])">
+<div id="viewer"></div>
 
 <script>
-// 1. Mock Data (ข้อมูลเริ่มต้น)
-let data = [
-    { id: 'p1', name: "ลานหน้าพระราชวัง (Demo)", lat: 13.7515, lon: 100.4927, image: "https://pannellum.org/images/alma.jpg" },
-    { id: 'p2', name: "สวนสาธารณะ (Demo)", lat: 13.7500, lon: 100.5000, image: "https://pannellum.org/images/cerro-toco-0.jpg" }
-];
+/* ===== CONFIG ===== */
+const CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com";
+const FOLDER_ID = "YOUR_DRIVE_FOLDER_ID";
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-let map, viewer, curId = null;
+let tokenClient, accessToken=null;
 
-window.onload = () => {
-    initMap();
-    renderTree();
-    loadViewer(); // โหลด viewer ครั้งแรก
-};
-
-function initMap() {
-    map = L.map('map', { attributionControl: false }).setView([13.75, 100.5], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    
-    // คลิกแผนที่เพื่อย้ายตำแหน่งจุดที่เลือกอยู่
-    map.on('click', (e) => {
-        if (curId) {
-            const p = data.find(x => x.id === curId);
-            p.lat = e.latlng.lat;
-            p.lon = e.latlng.lng;
-            document.getElementById('pCoords').innerText = p.lat.toFixed(5) + ", " + p.lon.toFixed(5);
-            renderTree();
-            updateMarkers();
-        }
-    });
-    updateMarkers();
+/* ===== AUTH ===== */
+function login(){
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (t) => accessToken = t.access_token
+  });
+  tokenClient.requestAccessToken();
 }
 
-function updateMarkers() {
-    map.eachLayer(l => { if (l instanceof L.Marker) map.removeLayer(l); });
-    data.forEach(p => {
-        L.marker([p.lat, p.lon]).addTo(map).on('click', () => enterEdit(p.id));
-    });
-}
+/* ===== UPLOAD ===== */
+async function upload(file){
+  if(!accessToken){ alert("Login ก่อน"); return; }
 
-function renderTree() {
-    const list = document.getElementById('tree-list');
-    list.innerHTML = data.map(p => `
-        <div class="list-item" onclick="enterEdit('${p.id}')">
-            <span>📍 ${p.name}</span>
-            <span class="badge">${p.image ? 'มีภาพ' : 'ไม่มีภาพ'}</span>
-        </div>
-    `).join('');
-}
-
-function loadViewer() {
-    if (viewer) viewer.destroy();
-    const p = data.find(x => x.id === curId) || data[0];
-    
-    if (!p || !p.image) {
-        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%">เลือกจุดที่มีภาพเพื่อแสดงผล</div>';
-        return;
-    }
-
-    viewer = pannellum.viewer('viewer', {
-        type: "equirectangular",
-        panorama: p.image,
-        autoLoad: true,
-        compass: true
-    });
-}
-
-function enterEdit(id) {
-    curId = id;
-    const p = data.find(x => x.id === id);
-    document.getElementById('edit-panel').style.display = 'block';
-    document.getElementById('pName').value = p.name;
-    document.getElementById('pCoords').innerText = p.lat.toFixed(5) + ", " + p.lon.toFixed(5);
-    loadViewer();
-    map.panTo([p.lat, p.lon]);
-}
-
-function exitEdit() {
-    document.getElementById('edit-panel').style.display = 'none';
-    curId = null;
-}
-
-function addNewPoint() {
-    const center = map.getCenter();
-    const id = 'p' + Date.now();
-    data.push({
-        id: id,
-        name: "จุดใหม่ " + (data.length + 1),
-        lat: center.lat,
-        lon: center.lng,
-        image: "" // ยังไม่มีภาพ
-    });
-    renderTree();
-    updateMarkers();
-    enterEdit(id);
-}
-
-function updateName() {
-    if (!curId) return;
-    data.find(x => x.id === curId).name = document.getElementById('pName').value;
-    renderTree();
-}
-
-function deletePoint() {
-    if (confirm('ลบจุดนี้ใช่หรือไม่?')) {
-        data = data.filter(x => x.id !== curId);
-        renderTree();
-        updateMarkers();
-        exitEdit();
-        loadViewer();
-    }
-}
-
-function previewImage(input) {
-    if (input.files && input.files[0] && curId) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const p = data.find(x => x.id === curId);
-            p.image = e.target.result; // เก็บเป็น Base64 ชั่วคราวใน Memory
-            loadViewer();
-            renderTree();
-        };
-        reader.readAsDataURL(input.files[0]);
-    }
-}
-</script>
-</body>
-</html>
+  const metadata = {
+    name: file.name,
+    parents: [FOLDER_ID_]()
