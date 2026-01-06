@@ -3,21 +3,30 @@
 <head>
 <meta charset="utf-8">
 <title>360 Upload to Google Drive</title>
+
+<!-- Google API -->
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+<!-- Pannellum -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
 
 <style>
-body{margin:0;font-family:sans-serif}
-#viewer{width:100%;height:80vh}
-button{padding:10px;margin:5px}
+body{margin:0;font-family:sans-serif;background:#111;color:#fff}
+header{padding:10px;background:#222}
+button,input{padding:8px;margin:5px}
+#viewer{width:100%;height:85vh}
 </style>
 </head>
-<body>
 
+<body>
+<header>
 <button onclick="login()">🔐 Login Google</button>
-<input type="file" accept="image/*" onchange="upload(this.files[0])">
+<input type="file" accept="image/*" onchange="upload360(this.files[0])">
+<span id="status"></span>
+</header>
+
 <div id="viewer"></div>
 
 <script>
@@ -26,22 +35,75 @@ const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleuser
 const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-let tokenClient, accessToken=null;
+let accessToken = null;
 
-/* ===== AUTH ===== */
+/* ===== LOGIN ===== */
 function login(){
-  tokenClient = google.accounts.oauth2.initTokenClient({
+  const tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    callback: (t) => accessToken = t.access_token
+    callback: (resp) => {
+      accessToken = resp.access_token;
+      setStatus("Login สำเร็จ");
+    }
   });
   tokenClient.requestAccessToken();
 }
 
 /* ===== UPLOAD ===== */
-async function upload(file){
-  if(!accessToken){ alert("Login ก่อน"); return; }
+async function upload360(file){
+  if(!accessToken){ alert("กรุณา Login ก่อน"); return; }
+  if(!file) return;
 
-  const metadata = {
+  setStatus("กำลังอัปโหลด...");
+
+  const meta = {
     name: file.name,
-    parents: [FOLDER_ID_]()
+    parents: [FOLDER_ID]
+  };
+
+  const form = new FormData();
+  form.append("metadata", new Blob([JSON.stringify(meta)], {type:"application/json"}));
+  form.append("file", file);
+
+  const r = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+    {
+      method: "POST",
+      headers: { Authorization: "Bearer " + accessToken },
+      body: form
+    }
+  );
+
+  const { id } = await r.json();
+
+  /* ตั้งค่า Public */
+  await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + accessToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ role:"reader", type:"anyone" })
+  });
+
+  const url = `https://drive.google.com/uc?id=${id}`;
+  setStatus("อัปโหลดสำเร็จ");
+  show360(url);
+}
+
+/* ===== VIEWER ===== */
+function show360(url){
+  pannellum.viewer('viewer',{
+    type:'equirectangular',
+    panorama:url,
+    autoLoad:true
+  });
+}
+
+function setStatus(t){
+  document.getElementById('status').innerText = t;
+}
+</script>
+</body>
+</html>
