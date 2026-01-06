@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>Drive Only App</title>
+<title>Drive-Only 360 App (Single File)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- Google -->
@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
 
 <style>
-body{margin:0;background:#111;color:#fff;font-family:sans-serif}
+body{margin:0;font-family:sans-serif;background:#111;color:#fff}
 #top{padding:8px;background:#000}
 #viewer{width:100%;height:calc(100vh - 45px)}
 button{margin-right:5px}
@@ -23,11 +23,11 @@ button{margin-right:5px}
 <body>
 
 <div id="top">
-<button onclick="login()">Login Google</button>
-<button onclick="loadDB()">Load</button>
-<button onclick="saveDB()">Save</button>
-<input type="file" accept="image/*" onchange="uploadImage(this.files[0])">
-<span id="status"></span>
+  <button onclick="login()">Login Google</button>
+  <button onclick="loadDB()">Load</button>
+  <button onclick="saveDB()">Save</button>
+  <input type="file" accept="image/*" onchange="uploadImage(this.files[0])">
+  <span id="status"></span>
 </div>
 
 <div id="viewer"></div>
@@ -38,85 +38,121 @@ const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleuser
 const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
+/* ===== STATE ===== */
 let tokenClient, accessToken;
 let db = [];
 let viewer;
 
 /* ===== GOOGLE INIT ===== */
-gapi.load("client", async()=>{
+gapi.load("client", async () => {
   await gapi.client.init({
-    discoveryDocs:["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
+    discoveryDocs: [
+      "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+    ]
   });
 });
 
 tokenClient = google.accounts.oauth2.initTokenClient({
   client_id: CLIENT_ID,
   scope: SCOPES,
-  callback:t=>{
-    accessToken=t.access_token;
+  callback: t => {
+    accessToken = t.access_token;
     gapi.client.setToken(t);
     log("Login OK");
   }
 });
 
-function login(){ tokenClient.requestAccessToken(); }
+function login(){
+  tokenClient.requestAccessToken();
+}
 
-/* ===== DRIVE ===== */
+/* ===== DRIVE HELPERS ===== */
 async function findFile(name){
   const r = await gapi.client.drive.files.list({
-    q:`'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
+    q: `'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
   });
-  return r.result.files[0];
+  return r.result.files[0] || null;
 }
 
+/* ===== LOAD DB ===== */
 async function loadDB(){
   const f = await findFile("data.json");
-  if(!f){ db=[]; log("DB empty"); return; }
-  const r = await fetch(
+
+  if(!f){
+    db = [];
+    log("ไม่พบ data.json → สร้างใหม่เมื่อกด Save");
+    return;
+  }
+
+  const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
-    {headers:{Authorization:`Bearer ${accessToken}`}}
+    { headers:{ Authorization:`Bearer ${accessToken}` } }
   );
-  db = await r.json();
+
+  db = await res.json();
+  log("Loaded "+db.length+" record");
+
   if(db[0]?.image) show360(db[0].image);
-  log("Loaded "+db.length);
 }
 
+/* ===== SAVE DB (CREATE IF NOT EXIST) ===== */
 async function saveDB(){
-  const body = JSON.stringify(db,null,2);
+  const body = JSON.stringify(db, null, 2);
   let f = await findFile("data.json");
 
   if(!f){
     await gapi.client.drive.files.create({
-      resource:{name:"data.json",parents:[FOLDER_ID]},
-      media:{mimeType:"application/json",body}
+      resource:{
+        name:"data.json",
+        parents:[FOLDER_ID]
+      },
+      media:{
+        mimeType:"application/json",
+        body
+      }
     });
+    log("สร้าง data.json ใหม่แล้ว");
   }else{
     await gapi.client.request({
       path:`/upload/drive/v3/files/${f.id}`,
       method:"PATCH",
-      params:{uploadType:"media"},
+      params:{ uploadType:"media" },
       body
     });
+    log("บันทึก data.json แล้ว");
   }
-  log("Saved");
 }
 
+/* ===== UPLOAD IMAGE ===== */
 async function uploadImage(file){
-  const meta={name:file.name,parents:[FOLDER_ID]};
-  const fd=new FormData();
-  fd.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
-  fd.append("file",file);
+  if(!file) return;
+
+  const meta = { name:file.name, parents:[FOLDER_ID] };
+  const fd = new FormData();
+  fd.append("metadata",
+    new Blob([JSON.stringify(meta)],{type:"application/json"}));
+  fd.append("file", file);
 
   const r = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-    {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:fd}
+    {
+      method:"POST",
+      headers:{ Authorization:`Bearer ${accessToken}` },
+      body:fd
+    }
   );
+
   const j = await r.json();
   const url = `https://drive.google.com/uc?id=${j.id}`;
 
-  db.push({id:Date.now(),image:url,hotspots:[]});
+  db.push({
+    id: Date.now(),
+    image: url,
+    hotspots: []
+  });
+
   show360(url);
-  log("Image uploaded");
+  log("Upload รูปสำเร็จ");
 }
 
 /* ===== VIEWER ===== */
@@ -129,7 +165,10 @@ function show360(url){
   });
 }
 
-function log(t){status.innerText=t;}
+/* ===== UI ===== */
+function log(t){
+  document.getElementById("status").innerText = t;
+}
 </script>
 </body>
 </html>
