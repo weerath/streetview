@@ -1,344 +1,125 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>YYYYYY</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+<meta charset="utf-8">
+<title>SV Editor – Drive Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <style>
-        :root { --accent: #007bff; --red: #dc3545; --dark: #212529; }
-        body { margin: 0; height: 100vh; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; background: #000; }
-        
-        /* Sidebar */
-        #sidebar { width: 350px; height: 100%; background: #ffffff; z-index: 2000; border-right: 1px solid #dee2e6; display: flex; flex-direction: column; }
-        #map-container { height: 250px; width: 100%; border-bottom: 1px solid #dee2e6; }
-        .panel { padding: 20px; overflow-y: auto; flex-grow: 1; }
-        
-        /* Viewer */
-        #viewer-container { flex-grow: 1; position: relative; background: #000; }
-        #viewer { width: 100%; height: 100%; }
-        
-        /* UI Elements */
-        .btn { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 10px; transition: 0.2s; }
-        .btn-primary { background: var(--accent); color: white; }
-        .btn-primary:hover { background: #0056b3; }
-        .list-item { padding: 12px; border-bottom: 1px solid #f1f1f1; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
-        .list-item:hover { background: #f8f9fa; border-left: 4px solid var(--accent); }
-        
-        /* Edit Overlay */
-        .edit-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background:white; z-index:10; display:none; padding: 20px; box-sizing: border-box; overflow-y: auto; }
-        .status-text { font-size: 0.85em; color: var(--accent); text-align: center; margin-top: 8px; font-weight: bold; }
-        
-        /* Upload Zone */
-        .upload-zone { border: 2px dashed #ddd; padding: 20px; border-radius: 8px; text-align: center; background: #f8f9fa; transition: 0.2s; }
-        .upload-zone:hover { border-color: var(--accent); background: #e9f5ff; }
-        .preview-img { max-width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-top: 10px; }
-        
-        /* Progress Bar */
-        .progress-bar { width: 100%; height: 6px; background: #e9ecef; border-radius: 3px; overflow: hidden; margin-top: 10px; display: none; }
-        .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
-    </style>
+<script src="https://accounts.google.com/gsi/client"></script>
+<script src="https://apis.google.com/js/api.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+
+<style>
+body{margin:0;font-family:sans-serif;background:#111;color:#fff}
+#bar{padding:10px;background:#000}
+button{margin-right:5px}
+#viewer{width:100%;height:calc(100vh - 50px)}
+</style>
 </head>
 <body>
 
-<div id="sidebar">
-    <div id="map-container"></div>
-    <div class="panel">
-        <h3 style="margin-top:0;">📍 จุดถ่าย 360°</h3>
-        <button class="btn btn-primary" onclick="addNewPoint()">+ เพิ่มจุดใหม่</button>
-        <div id="tree-list" style="margin-top: 15px;"></div>
-    </div>
-
-    <div id="edit-panel" class="edit-overlay">
-        <h3>✏️ แก้ไขข้อมูลจุด 360</h3>
-        
-        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ชื่อสถานที่:</label>
-        <input type="text" id="pName" placeholder="ระบุชื่อสถานที่..." style="width:100%; padding:10px; margin-bottom: 20px; border:1px solid #ccc; border-radius:4px; box-sizing: border-box;" oninput="updateName()">
-        
-        <label style="font-weight: 600; display: block; margin-bottom: 8px;">ภาพ 360 องศา:</label>
-        <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
-            <div style="font-size: 48px;">🌐</div>
-            <p style="margin: 10px 0 5px 0; font-weight: 600;">คลิกเพื่ออัปโหลดภาพ Equirectangular</p>
-            <p style="margin: 0; font-size: 0.85em; color: #6c757d;">รองรับ JPG, PNG (แนะนำอัตราส่วน 2:1)</p>
-            <input type="file" id="fileInput" accept="image/*" style="display:none;" onchange="handleFileUpload(this)">
-            
-            <div class="progress-bar" id="progressBar">
-                <div class="progress-fill" id="progressFill"></div>
-            </div>
-            <div id="uploadStatus" class="status-text"></div>
-            <img id="previewImg" class="preview-img" style="display:none;">
-        </div>
-
-        <button class="btn" style="background:#f1f1f1; margin-top:30px;" onclick="exitEdit()">⬅ กลับหน้าหลัก</button>
-        <button class="btn" style="background:var(--red); color:white;" onclick="deletePoint()">🗑️ ลบจุดนี้</button>
-    </div>
+<div id="bar">
+<button onclick="login()">Login Google</button>
+<button onclick="loadDB()">Load</button>
+<button onclick="saveDB()">Save</button>
+<input type="file" accept="image/*" onchange="uploadImage(this.files[0])">
+<span id="msg"></span>
 </div>
 
-<div id="viewer-container">
-    <div id="viewer"></div>
-</div>
+<div id="viewer"></div>
 
 <script>
-// --- FIREBASE CONFIGURATION ---
-const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT.firebaseio.com",
-    projectId: "YOUR_PROJECT",
-    storageBucket: "YOUR_PROJECT.appspot.com",
-    appId: "YOUR_APP_ID"
-};
+/* ===== CONFIG ===== */
+const CLIENT_ID = "YOUR_CLIENT_ID";
+const FOLDER_ID = "YOUR_FOLDER_ID";
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
-// Global Variables
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-let map, viewer, dataList = [], curId = null;
+let tokenClient, accessToken;
+let data = [];
+let viewer;
 
-window.onload = () => {
-    initMap();
-    loadFirebaseData();
-};
+/* ===== GOOGLE INIT ===== */
+gapi.load("client", async()=>{
+  await gapi.client.init({
+    discoveryDocs:["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
+  });
+});
 
-function initMap() {
-    map = L.map('map-container', { attributionControl: false }).setView([13.75, 100.5], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
-    
-    // Add click handler to add points on map
-    map.on('click', (e) => {
-        if (curId) {
-            db.ref(`points/${curId}`).update({ 
-                lat: e.latlng.lat, 
-                lon: e.latlng.lng 
-            });
-        }
+tokenClient = google.accounts.oauth2.initTokenClient({
+  client_id: CLIENT_ID,
+  scope: SCOPES,
+  callback: t=>{
+    accessToken=t.access_token;
+    gapi.client.setToken(t);
+    msg("Login OK");
+  }
+});
+
+function login(){ tokenClient.requestAccessToken(); }
+
+/* ===== DRIVE ===== */
+async function findFile(name){
+  const r = await gapi.client.drive.files.list({
+    q:`'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
+  });
+  return r.result.files[0];
+}
+
+async function loadDB(){
+  const f = await findFile("data.json");
+  if(!f){ data=[]; msg("Empty DB"); return; }
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+    {headers:{Authorization:`Bearer ${accessToken}`}}
+  );
+  data = await r.json();
+  if(data[0]?.image) loadViewer(data[0].image);
+  msg("Loaded "+data.length);
+}
+
+async function saveDB(){
+  const body = JSON.stringify(data,null,2);
+  let f = await findFile("data.json");
+
+  if(!f){
+    await gapi.client.drive.files.create({
+      resource:{name:"data.json",parents:[FOLDER_ID]},
+      media:{mimeType:"application/json",body}
     });
-}
-
-function loadFirebaseData() {
-    db.ref('points').on('value', (snap) => {
-        const val = snap.val();
-        dataList = val ? Object.keys(val).map(key => ({...val[key], id: key})) : [];
-        renderTree();
-        updateMapMarkers();
+  }else{
+    await gapi.client.request({
+      path:`/upload/drive/v3/files/${f.id}`,
+      method:"PATCH",
+      params:{uploadType:"media"},
+      body
     });
+  }
+  msg("Saved");
 }
 
-function updateMapMarkers() {
-    map.eachLayer((layer) => {
-        if (layer instanceof L.Marker) map.removeLayer(layer);
-    });
-    
-    dataList.forEach(p => {
-        const marker = L.marker([p.lat, p.lon])
-            .addTo(map)
-            .bindPopup(`<b>${p.name || 'ไม่มีชื่อ'}</b>`)
-            .on('click', () => enterEdit(p.id));
-    });
+async function uploadImage(file){
+  const meta={name:file.name,parents:[FOLDER_ID]};
+  const fd=new FormData();
+  fd.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
+  fd.append("file",file);
+
+  const r = await fetch(
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+    {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:fd}
+  );
+  const j = await r.json();
+  const url=`https://drive.google.com/uc?id=${j.id}`;
+  data.push({id:Date.now(),name:file.name,image:url});
+  loadViewer(url);
+  msg("Uploaded");
 }
 
-// --- 360 Viewer Management ---
-function update360Viewer(imageData) {
-    if (viewer) viewer.destroy();
-    
-    if (!imageData) {
-        document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">📷 ยังไม่มีภาพ 360 องศา<br><span style="font-size: 0.8em; color: #888;">อัปโหลดภาพในแผงด้านซ้าย</span></div>';
-        return;
-    }
-    
-    viewer = pannellum.viewer('viewer', {
-        type: "equirectangular",
-        panorama: imageData,
-        autoLoad: true,
-        showControls: true,
-        compass: true,
-        autoRotate: -2,
-        mouseZoom: true,
-        hfov: 100
-    });
+/* ===== VIEW ===== */
+function loadViewer(url){
+  if(viewer) viewer.destroy();
+  viewer = pannellum.viewer("viewer",{type:"equirectangular",panorama:url,autoLoad:true});
 }
-
-// --- Upload Handler with Base64 & Compression ---
-async function handleFileUpload(input) {
-    const file = input.files[0];
-    if (!file || !curId) return;
-
-    const status = document.getElementById('uploadStatus');
-    const progress = document.getElementById('progressBar');
-    const progressFill = document.getElementById('progressFill');
-    const preview = document.getElementById('previewImg');
-    
-    status.innerText = "⏳ กำลังประมวลผลภาพ...";
-    progress.style.display = 'block';
-    progressFill.style.width = '30%';
-
-    try {
-        // Read and compress image
-        const base64Data = await compressAndConvertToBase64(file, (percent) => {
-            progressFill.style.width = percent + '%';
-        });
-        
-        progressFill.style.width = '80%';
-        status.innerText = "💾 กำลังบันทึกลง Firebase...";
-        
-        // Save to Firebase
-        await db.ref(`points/${curId}`).update({ image: base64Data });
-        
-        progressFill.style.width = '100%';
-        status.innerText = "✅ อัปโหลดสำเร็จ!";
-        
-        // Update viewer and preview
-        update360Viewer(base64Data);
-        preview.src = base64Data;
-        preview.style.display = 'block';
-        
-        setTimeout(() => {
-            progress.style.display = 'none';
-            progressFill.style.width = '0%';
-        }, 2000);
-        
-    } catch (e) {
-        status.innerText = "❌ ผิดพลาด: " + e.message;
-        progress.style.display = 'none';
-    } finally {
-        input.value = '';
-    }
-}
-
-function compressAndConvertToBase64(file, progressCallback) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        
-        reader.onprogress = (e) => {
-            if (e.lengthComputable) {
-                const percent = Math.round((e.loaded / e.total) * 50);
-                progressCallback(percent);
-            }
-        };
-        
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => {
-                // Calculate new dimensions (max 4096px for performance)
-                let width = img.width;
-                let height = img.height;
-                const maxSize = 4096;
-                
-                if (width > maxSize || height > maxSize) {
-                    if (width > height) {
-                        height = Math.round((height * maxSize) / width);
-                        width = maxSize;
-                    } else {
-                        width = Math.round((width * maxSize) / height);
-                        height = maxSize;
-                    }
-                }
-                
-                progressCallback(60);
-                
-                // Create canvas and compress
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                progressCallback(70);
-                
-                // Convert to base64 (JPEG with 0.85 quality)
-                const base64 = canvas.toDataURL('image/jpeg', 0.85);
-                resolve(base64);
-            };
-            img.onerror = () => reject(new Error('ไม่สามารถโหลดภาพได้'));
-            img.src = e.target.result;
-        };
-        
-        reader.onerror = () => reject(new Error('ไม่สามารถอ่านไฟล์ได้'));
-        reader.readAsDataURL(file);
-    });
-}
-
-// --- UI Logic ---
-function renderTree() {
-    const list = document.getElementById('tree-list');
-    if (dataList.length === 0) {
-        list.innerHTML = '<div style="text-align:center; color:#999; padding:20px;">ยังไม่มีจุด 360<br>คลิก + เพื่อเพิ่มจุดใหม่</div>';
-        return;
-    }
-    
-    list.innerHTML = dataList.map(p => `
-        <div class="list-item" onclick="enterEdit('${p.id}')">
-            <span>📍 ${p.name || 'ไม่มีชื่อ'}</span>
-            <span>${p.image ? '🌐' : '⚪'}</span>
-        </div>
-    `).join('');
-}
-
-function enterEdit(id) {
-    curId = id;
-    const p = dataList.find(x => x.id === id);
-    
-    document.getElementById('edit-panel').style.display = 'block';
-    document.getElementById('pName').value = p.name || '';
-    document.getElementById('uploadStatus').innerText = "";
-    document.getElementById('progressBar').style.display = 'none';
-    document.getElementById('progressFill').style.width = '0%';
-    
-    const preview = document.getElementById('previewImg');
-    if (p.image) {
-        preview.src = p.image;
-        preview.style.display = 'block';
-    } else {
-        preview.style.display = 'none';
-    }
-    
-    update360Viewer(p.image);
-    map.panTo([p.lat, p.lon], { animate: true });
-}
-
-function addNewPoint() {
-    const center = map.getCenter();
-    const newRef = db.ref('points').push({
-        name: "จุดใหม่ " + (dataList.length + 1),
-        lat: center.lat,
-        lon: center.lng,
-        image: ""
-    });
-    
-    // Auto-open edit panel for new point
-    setTimeout(() => enterEdit(newRef.key), 300);
-}
-
-let typingTimer;
-function updateName() {
-    clearTimeout(typingTimer);
-    const newName = document.getElementById('pName').value;
-    typingTimer = setTimeout(() => {
-        if (curId) db.ref(`points/${curId}`).update({ name: newName });
-    }, 500);
-}
-
-function deletePoint() {
-    if (confirm('⚠️ ต้องการลบจุด 360 นี้หรือไม่?')) {
-        db.ref(`points/${curId}`).remove();
-        exitEdit();
-    }
-}
-
-function exitEdit() {
-    document.getElementById('edit-panel').style.display = 'none';
-    curId = null;
-    if (viewer) viewer.destroy();
-    document.getElementById('viewer').innerHTML = '<div style="color:white; text-align:center; padding-top:20%; font-size: 1.2em;">👈 เลือกจุด 360 จากด้านซ้าย</div>';
-}
+function msg(t){document.getElementById("msg").innerText=t;}
 </script>
 </body>
 </html>
