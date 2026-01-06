@@ -2,30 +2,35 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>360 Upload to Google Drive</title>
+<title>Master SV Editor – Google Drive Only</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- Google API -->
+<!-- LIB -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+<!-- GOOGLE -->
 <script src="https://accounts.google.com/gsi/client"></script>
 <script src="https://apis.google.com/js/api.js"></script>
 
-<!-- Pannellum -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
-<script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
-
 <style>
-body{margin:0;font-family:sans-serif;background:#111;color:#fff}
-header{padding:10px;background:#222}
-button,input{padding:8px;margin:5px}
-#viewer{width:100%;height:85vh}
+body{margin:0;font-family:sans-serif;background:#000}
+#top{padding:10px;background:#111;color:#fff}
+#viewer,#map{width:100%;height:calc(100vh - 50px)}
+button{padding:8px;margin:5px}
 </style>
 </head>
 
 <body>
-<header>
+<div id="top">
 <button onclick="login()">🔐 Login Google</button>
-<input type="file" accept="image/*" onchange="upload360(this.files[0])">
+<button onclick="loadDB()">📥 Load</button>
+<button onclick="saveDB()">💾 Save</button>
+<input type="file" id="file" accept="image/*" onchange="uploadImage()">
 <span id="status"></span>
-</header>
+</div>
 
 <div id="viewer"></div>
 
@@ -35,75 +40,110 @@ const CLIENT_ID = "740899492808-qoi3pjpfbe2sp8e8e4q43tr2sm0cnuhl.apps.googleuser
 const FOLDER_ID = "1PQWNipWJ3f6HvS_g8j3eC4_eKJ7NVC79";
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
 
+let tokenClient;
 let accessToken = null;
+let data = [];
+let viewer;
 
-/* ===== LOGIN ===== */
-function login(){
-  const tokenClient = google.accounts.oauth2.initTokenClient({
+/* ===== INIT GOOGLE ===== */
+function initGoogle(){
+  gapi.load("client", async ()=>{
+    await gapi.client.init({
+      discoveryDocs:["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"]
+    });
+  });
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    callback: (resp) => {
-      accessToken = resp.access_token;
-      setStatus("Login สำเร็จ");
+    callback: (t)=>{
+      accessToken = t.access_token;
+      gapi.client.setToken(t);
+      log("Login OK");
     }
   });
+}
+initGoogle();
+
+/* ===== AUTH ===== */
+function login(){
   tokenClient.requestAccessToken();
 }
 
-/* ===== UPLOAD ===== */
-async function upload360(file){
-  if(!accessToken){ alert("กรุณา Login ก่อน"); return; }
+/* ===== DRIVE UTILS ===== */
+async function findFile(name){
+  const r = await gapi.client.drive.files.list({
+    q: `'${FOLDER_ID}' in parents and name='${name}' and trashed=false`
+  });
+  return r.result.files[0];
+}
+
+async function loadDB(){
+  const f = await findFile("data.json");
+  if(!f){ data=[]; log("DB empty"); return; }
+
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`,
+    { headers:{Authorization:`Bearer ${accessToken}`} }
+  );
+  data = await res.json();
+  log("Loaded "+data.length+" points");
+  if(data[0]?.image) loadViewer(data[0].image);
+}
+
+async function saveDB(){
+  let f = await findFile("data.json");
+  const body = JSON.stringify(data,null,2);
+
+  if(!f){
+    await gapi.client.drive.files.create({
+      resource:{name:"data.json",parents:[FOLDER_ID]},
+      media:{mimeType:"application/json",body}
+    });
+  }else{
+    await gapi.client.request({
+      path:`/upload/drive/v3/files/${f.id}`,
+      method:"PATCH",
+      params:{uploadType:"media"},
+      body
+    });
+  }
+  log("Saved DB");
+}
+
+async function uploadImage(){
+  const file = document.getElementById("file").files[0];
   if(!file) return;
 
-  setStatus("กำลังอัปโหลด...");
-
-  const meta = {
-    name: file.name,
-    parents: [FOLDER_ID]
-  };
-
+  const meta = {name:file.name,parents:[FOLDER_ID]};
   const form = new FormData();
-  form.append("metadata", new Blob([JSON.stringify(meta)], {type:"application/json"}));
+  form.append("metadata", new Blob([JSON.stringify(meta)],{type:"application/json"}));
   form.append("file", file);
 
   const r = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-    {
-      method: "POST",
-      headers: { Authorization: "Bearer " + accessToken },
-      body: form
-    }
+    {method:"POST",headers:{Authorization:`Bearer ${accessToken}`},body:form}
   );
+  const j = await r.json();
+  const imgUrl = `https://drive.google.com/uc?id=${j.id}`;
 
-  const { id } = await r.json();
-
-  /* ตั้งค่า Public */
-  await fetch(`https://www.googleapis.com/drive/v3/files/${id}/permissions`, {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + accessToken,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ role:"reader", type:"anyone" })
-  });
-
-  const url = `https://drive.google.com/uc?id=${id}`;
-  setStatus("อัปโหลดสำเร็จ");
-  show360(url);
+  data.push({id:"p"+Date.now(),name:file.name,image:imgUrl,hotSpots:[]});
+  loadViewer(imgUrl);
+  log("Image uploaded");
 }
 
 /* ===== VIEWER ===== */
-function show360(url){
-  pannellum.viewer('viewer',{
-    type:'equirectangular',
+function loadViewer(url){
+  if(viewer) viewer.destroy();
+  viewer = pannellum.viewer("viewer",{
+    type:"equirectangular",
     panorama:url,
     autoLoad:true
   });
 }
 
-function setStatus(t){
-  document.getElementById('status').innerText = t;
-}
+/* ===== UI ===== */
+function log(t){document.getElementById("status").innerText=t;}
 </script>
 </body>
 </html>
